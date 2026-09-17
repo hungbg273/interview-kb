@@ -6,7 +6,7 @@ Product name (working): Interview Knowledge Base
 
 ## 1. Purpose
 
-A personal web app to **systematize interview knowledge**. The owner (admin) writes Markdown notes, organizes them with topics/tags, attaches Q&A, and uses AI (OpenAI or DeepSeek) to summarize, expand, or generate questions.
+A personal web app to **systematize interview knowledge**. The owner (admin) writes Markdown notes, organizes them with topics/tags, attaches **multiple-choice questions (A/B/C/D, one correct)**, and uses AI (OpenAI or DeepSeek) to summarize, expand, or generate those questions.
 
 This is also a **fullstack practice project** for a backend engineer: React/Next.js, NestJS API design, PostgreSQL, Docker Compose, then later CI/CD and a public portfolio.
 
@@ -18,7 +18,7 @@ This is also a **fullstack practice project** for a backend engineer: React/Next
 
 ### v1 goals
 
-- Private knowledge base: topics (optional tree), tags, Markdown notes, Q&A attached to notes.
+- Private knowledge base: topics (optional tree), tags, Markdown notes, **ABCD multiple-choice** questions attached to notes.
 - Google OAuth; only emails in `ADMIN_EMAILS` can use the app.
 - AI actions on a note: summarize, expand, generate questions.
 - Local run via Docker Compose (web + api + postgres).
@@ -27,7 +27,7 @@ This is also a **fullstack practice project** for a backend engineer: React/Next
 ### Explicitly out of v1
 
 - Public portfolio.
-- Practice / mock interview loop (sessions, grading, spaced repetition). Q&A records exist so that phase can attach later.
+- Practice / mock interview loop (sessions, timed quiz, scoring). MCQ rows exist so that phase can hide choices until the owner answers.
 - Multi-user, roles, or `users` table.
 - Cloud deploy and GitHub Actions.
 - Browser e2e (Playwright/Cypress).
@@ -37,7 +37,7 @@ This is also a **fullstack practice project** for a backend engineer: React/Next
 
 ### Later phases (not this spec’s implementation)
 
-1. **Practice/mock** — quiz from `Question`, AI feedback.
+1. **Practice/mock** — quiz from `Question` (show A–D, submit, reveal `correct_choice` + explanation).
 2. **Portfolio** — public read-only site for interviewers.
 3. **Cloud + CI/CD** — GitHub Actions, host FE/BE/DB.
 4. **Multi-user** — add `users` / `roles` and `owner_id` on notes.
@@ -126,16 +126,24 @@ Deleting a note removes NoteTag rows (cascade). Deleting a tag **blocked** if st
 
 ### Question
 
+Exactly **four** options A, B, C, D. Exactly **one** correct option. Not free-text answers.
+
 | Column | Type | Notes |
 |---|---|---|
 | id | uuid PK | |
 | note_id | uuid not null FK → Note ON DELETE CASCADE | |
-| prompt | text not null | the question |
-| answer_markdown | text not null | |
-| extra_notes | text null | |
+| prompt | text not null | question stem |
+| choice_a | text not null | |
+| choice_b | text not null | |
+| choice_c | text not null | |
+| choice_d | text not null | |
+| correct_choice | enum `A` \| `B` \| `C` \| `D` | |
+| explanation_markdown | text null | why the correct choice is right |
 | source | enum `manual` \| `ai` | |
 | created_at | timestamptz | |
 | updated_at | timestamptz | |
+
+Validation (400): all four choices non-empty; `correct_choice` must be A, B, C, or D; prompt non-empty. No multi-correct, no true/false-only type in v1.
 
 Search: PostgreSQL full-text on `Note.title` and `Note.body_markdown` (`tsvector` generated column + GIN index). Query param `q` on note list.
 
@@ -180,8 +188,8 @@ Base URL: `http://localhost:4000`. JSON. Authenticated unless noted.
 
 **Questions**
 
-- `POST /notes/:noteId/questions`
-- `PATCH /questions/:id`
+- `POST /notes/:noteId/questions` body `{ prompt, choiceA, choiceB, choiceC, choiceD, correctChoice, explanationMarkdown? }`
+- `PATCH /questions/:id` same fields, all optional except at least one
 - `DELETE /questions/:id`
 
 **AI**
@@ -191,7 +199,7 @@ Base URL: `http://localhost:4000`. JSON. Authenticated unless noted.
 Semantics:
 
 - `summarize` / `expand`: return `{ markdown }`. **Do not write** the note. The UI shows a preview; user copies or clicks Apply (Apply is `PATCH /notes/:id` with that markdown).
-- `generate-questions`: model returns a JSON list of `{ prompt, answer_markdown }`; API inserts `Question` rows with `source=ai`. Return the created rows. Cap **8** questions per call (truncate extras).
+- `generate-questions`: model returns JSON list of `{ prompt, choiceA, choiceB, choiceC, choiceD, correctChoice, explanationMarkdown? }`. API inserts `Question` rows with `source=ai`. Drop any item that is not a valid ABCD MCQ. Cap **8** questions per call (truncate extras). Return the created rows.
 
 Timeout: **30 seconds** per LLM call. No streaming in v1.
 
@@ -204,11 +212,11 @@ Env on api:
 
 One HTTP client (OpenAI-compatible chat completions). `provider` picks key, base URL, and model. If the chosen provider’s key is missing → `AI_NOT_CONFIGURED` (503).
 
-Prompts are server-side templates: include note title + body; for generate-questions ask for strict JSON only.
+Prompts are server-side templates: include note title + body; for generate-questions ask for strict JSON of ABCD items (`correctChoice` one of `A|B|C|D`).
 
 ## 9. Frontend (apps/web)
 
-Next.js App Router. UI language: **Vietnamese**. Note/Q&A content is whatever the owner types (typically English for interview prep).
+Next.js App Router. UI language: **Vietnamese**. Note and question content is whatever the owner types (typically English for interview prep).
 
 **Routes**
 
@@ -218,11 +226,13 @@ Next.js App Router. UI language: **Vietnamese**. Note/Q&A content is whatever th
 | `/` | required | note list: search, filter topic/tag, create |
 | `/topics` | required | topic list/tree CRUD |
 | `/notes/new` | required | editor |
-| `/notes/:id` | required | editor + Q&A + AI panel |
+| `/notes/:id` | required | editor + ABCD questions + AI panel |
 
 Unauthenticated access to protected routes → `/login`.
 
-**Note editor (v1):** split pane, textarea Markdown + preview. Explicit **Save** button (no autosave). AI panel: choose provider, buttons Summarize / Expand / Generate questions. Summarize/expand result in a preview with Apply or Discard. Generate questions appends to the Q&A list. Empty states have a CTA (create topic / create note).
+**Note editor (v1):** split pane, textarea Markdown + preview. Explicit **Save** button (no autosave). AI panel: choose provider, buttons Summarize / Expand / Generate questions. Summarize/expand result in a preview with Apply or Discard. Generate questions appends ABCD items to the list.
+
+**Question editor (authoring, not quiz):** stem + four labeled fields A–D + radio for the correct letter + optional explanation. List on the note shows stem and the correct letter (this is the owner’s key, not a hidden exam). Empty states have a CTA (create topic / create note / add question).
 
 **Markdown:** `react-markdown` for preview. No file upload / images hosting in v1 (pasted `![alt](url)` is fine if the URL is external).
 
@@ -238,7 +248,7 @@ Unified body:
 |---|---|---|
 | 401 | UNAUTHENTICATED | missing/expired JWT → web redirects to `/login` |
 | 403 | FORBIDDEN | Google email not in whitelist |
-| 400 | VALIDATION | DTO fail (empty title, body too long) |
+| 400 | VALIDATION | DTO fail (empty title, body too long, missing ABCD choice, invalid `correctChoice`) |
 | 404 | NOT_FOUND | unknown note/topic/tag/question |
 | 409 | CONFLICT | duplicate slug/name; delete blocked by children/notes |
 | 502 | AI_UPSTREAM | provider 4xx/5xx after mapping |
@@ -251,8 +261,8 @@ Messages never include API keys or raw provider payloads. Validation errors incl
 
 **api**
 
-- Unit (Prisma mocked): provider URL/key mapping; summarize/expand do not persist; generate-questions inserts rows with `source=ai`.
-- API e2e (supertest + the Compose Postgres): whitelist 403 vs happy JWT path (Google OAuth mocked); note CRUD; 404; 409 slug; AI timeout mocked.
+- Unit (Prisma mocked): provider URL/key mapping; summarize/expand do not persist; generate-questions inserts ABCD rows with `source=ai` and valid `correct_choice`; invalid AI items are dropped.
+- API e2e (supertest + the Compose Postgres): whitelist 403 vs happy JWT path (Google OAuth mocked); note CRUD; ABCD question 400 on invalid choice; 404; 409 slug; AI timeout mocked.
 
 **web**
 
@@ -269,24 +279,59 @@ Root `.env.example` documents: `ADMIN_EMAILS`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIEN
 
 Google OAuth redirect URI for local: `http://localhost:4000/auth/google/callback`.
 
-## 13. Learning checklist (alongside the product)
+## 13. How you work this project
 
-v1 (this spec)
+You implement **manually, one checklist item at a time**. When an item is done, you ask for a **review** of that item only. Do not skip ahead. The reviewer checks the diff against this spec (ABCD questions, auth, error shape, tests) and does not implement the next item unless you ask.
 
-- [ ] Monorepo + Docker Compose
-- [ ] Next.js App Router, list/detail, Markdown preview
-- [ ] NestJS modules, Prisma, REST
-- [ ] Cookie auth + CORS
-- [ ] Integrate an upstream HTTP API (LLM)
+A more detailed task-level plan (files, tests, commands) will live in `docs/superpowers/plans/` after this spec is approved. The checklist below is the **review cadence** — each box is a shippable slice you can demo locally.
 
-After v1
+## 14. Manual checklist (v1)
 
-- [ ] Practice/mock on top of `Question`
+Work top to bottom. Check a box only after review passes.
+
+### Setup
+
+- [ ] **1. Repo skeleton** — npm workspaces, `apps/web`, `apps/api`, `packages/shared`, root `.env.example`, `.gitignore`. `npm install` works from root.
+- [ ] **2. Docker Compose + Postgres** — `db` service healthy; `DATABASE_URL` documented; Prisma schema file exists (even if empty models). `docker compose up db` works.
+
+### API foundation
+
+- [ ] **3. NestJS bootstrap** — app listens on `:4000`, health `GET /health`, global error filter `{ error: { code, message } }`, CORS for `WEB_ORIGIN` with credentials.
+- [ ] **4. Prisma models + first migration** — Topic, Tag, Note, NoteTag, Question (ABCD columns + `correct_choice`). Migration committed.
+- [ ] **5. Auth** — Google OAuth, JWT httpOnly cookie, `ADMIN_EMAILS` whitelist, `/auth/me`, `/auth/logout`. Non-whitelist → 403. Unauthenticated API → 401.
+
+### Knowledge API
+
+- [ ] **6. Topics + Tags CRUD** — including 409 rules (children, notes still attached, duplicate slug).
+- [ ] **7. Notes CRUD + search + tags** — list filters `topicId`, `tagId`, `q`; FTS on title/body; `PUT /notes/:id/tags`.
+- [ ] **8. Questions CRUD (ABCD)** — create/update/delete MCQ on a note; 400 if missing choice or invalid `correctChoice`.
+
+### AI
+
+- [ ] **9. AI module** — OpenAI + DeepSeek env; summarize/expand return markdown and **do not** write the note; generate-questions inserts valid ABCD rows only (`source=ai`); timeout 30s; 503/502/504 as specified.
+
+### Web
+
+- [ ] **10. Next.js shell + auth gate** — `/login` Google button; protected routes redirect; `credentials: 'include'`; logout.
+- [ ] **11. Topics + note list** — Vietnamese UI; search/filter; empty-state CTA.
+- [ ] **12. Note editor** — Markdown preview, explicit Save, field errors.
+- [ ] **13. ABCD question UI** — add/edit/delete on a note; radio for correct letter; show correct letter in the list.
+- [ ] **14. AI panel** — provider select; Summarize/Expand preview + Apply/Discard; Generate questions appends MCQs; banner + Retry on AI errors.
+
+### Tests and local bar
+
+- [ ] **15. API tests** — unit (mocked Prisma/LLM) + e2e supertest (auth, note CRUD, ABCD validation, 409, AI timeout mocked).
+- [ ] **16. Web component tests** — editor Save, empty state, AI banner/Retry.
+- [ ] **17. Compose whole stack** — `docker compose up` runs web + api + db; smoke: login, create note, add ABCD question, run one AI action if keys exist.
+
+### After v1 (do not start until v1 checklist is done)
+
+- [ ] Practice/mock quiz from `Question` (hide `correct_choice` until submit)
 - [ ] Public portfolio
-- [ ] GitHub Actions, cloud deploy
+- [ ] GitHub Actions + cloud deploy
 - [ ] Multi-user if needed
 
-## 14. Decisions log
+## 15. Decisions log
 
 | Decision | Choice | Rejected |
 |---|---|---|
@@ -299,6 +344,7 @@ After v1
 | AI | OpenAI + DeepSeek, sync | Single provider only; full agnostic gateway |
 | Auth | Google OAuth + whitelist | password; env-only gate |
 | Deploy v1 | Docker Compose local | Vercel/Railway; VPS |
-| Note shape | Markdown + attached Q&A | Wiki-only; Q&A-only |
-| AI write policy | Preview then Apply; generate-questions inserts drafts | Autowrite into note |
+| Note shape | Markdown + attached **ABCD MCQ** | Wiki-only; free-text Q&A |
+| AI write policy | Preview then Apply; generate-questions inserts ABCD drafts | Autowrite into note |
 | Save | Explicit Save | Autosave |
+| Implementation | Owner does checklist items; review after each | Agent implements the whole v1 unattended |
