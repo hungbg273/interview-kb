@@ -72,4 +72,19 @@ describe('API bootstrap (e2e)', () => {
     `);
     expect(constraints).toHaveLength(1);
   });
+
+  it('GET /auth/me without cookie is 401 UNAUTHENTICATED', async () => {
+    const res = await request(app.getHttpServer()).get('/auth/me').expect(401);
+    expect(res.body).toEqual({
+      error: { code: 'UNAUTHENTICATED', message: expect.any(String) },
+    });
+  });
+
+  it('GET /docs-json is public OpenAPI', async () => {
+    const res = await request(app.getHttpServer()).get('/docs-json').expect(200);
+    expect(res.body.openapi).toMatch(/^3\./);
+    expect(res.body.info.title).toEqual(expect.any(String));
+    expect(res.body.paths['/health']).toBeDefined();
+    expect(res.body.paths['/auth/me']).toBeDefined();
+  });
 });

@@ -1,6 +1,7 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
 import { AppErrorFilter } from './common/app-error.filter';
+import { setupSwagger } from './setup-swagger';
 
 export function configureApp(app: INestApplication) {
   const origin = process.env.WEB_ORIGIN ?? 'http://localhost:3000';
@@ -15,4 +16,5 @@ export function configureApp(app: INestApplication) {
       forbidNonWhitelisted: true,
     }),
   );
+  setupSwagger(app);
 }
