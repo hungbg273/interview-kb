@@ -1,7 +1,7 @@
 # Interview Knowledge Base — Design Spec
 
 Date: 2026-09-17  
-Status: draft, pending user review  
+Status: approved  
 Product name (working): Interview Knowledge Base
 
 ## 1. Purpose
