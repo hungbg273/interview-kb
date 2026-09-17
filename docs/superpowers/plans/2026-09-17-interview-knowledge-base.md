@@ -6,9 +6,11 @@
 
 **Goal:** Ship a private interview knowledge base: Markdown notes, topics/tags, ABCD multiple-choice questions, Google OAuth whitelist, and OpenAI/DeepSeek actions — running locally on Docker Compose.
 
-**Architecture:** npm workspaces monorepo. Next.js (`apps/web`, :3000) is the UI. NestJS (`apps/api`, :4000) owns REST, Google OAuth + JWT cookie, Prisma/PostgreSQL, and all LLM calls. Shared DTOs live in `packages/shared`. The browser calls the API with `credentials: 'include'`; Next is not a BFF.
+**Architecture:** npm workspaces monorepo. Next.js (`apps/web`, :3000) is the UI. NestJS (`apps/api`, :4000) owns REST, Google OAuth + JWT cookie, TypeORM/PostgreSQL, and all LLM calls. Shared DTOs live in `packages/shared`. The browser calls the API with `credentials: 'include'`; Next is not a BFF.
 
-**Tech Stack:** Next.js 15 (App Router, React 19), NestJS 10, Prisma 6, PostgreSQL 16, Passport Google + JWT cookie, Jest + Supertest (api), Vitest + Testing Library (web).
+**Tech Stack:** Next.js 15 (App Router, React 19), NestJS 12, TypeORM + `pg`, PostgreSQL 16, Passport Google + JWT cookie, Jest + Supertest (api), Vitest + Testing Library (web).
+
+**ORM (all later tasks):** TypeORM. Do **not** add Prisma. If an older snippet still says `PrismaService` / `prisma.topic`, implement with `@InjectRepository(Entity)` (or `DataSource.getRepository`). Unique violation = Postgres `23505` (`QueryFailedError`), not Prisma `P2002`. FTS = `dataSource.query(...)`, not `$queryRaw`.
 
 ---
 
@@ -22,8 +24,9 @@
 | `packages/shared/src/index.ts` | DTOs, error codes, slugify, admin-email check |
 | `apps/api/src/main.ts` | listen :4000, CORS, cookies, ValidationPipe |
 | `apps/api/src/common/app-error.ts` | `AppError` + filter → `{ error: { code, message } }` |
-| `apps/api/src/prisma/` | PrismaService |
-| `apps/api/prisma/schema.prisma` | Topic, Tag, Note, NoteTag, Question |
+| `apps/api/src/database/` | TypeORM `DataSource` / `TypeOrmModule.forRoot` |
+| `apps/api/src/**/*.entity.ts` | Topic, Tag, Note, NoteTag, Question |
+| `apps/api/src/migrations/` | SQL/TypeORM migrations including Note FTS |
 | `apps/api/src/auth/` | Google OAuth, JWT cookie, whitelist, guard |
 | `apps/api/src/topics/` | Topic CRUD + 409 rules |
 | `apps/api/src/tags/` | Tag CRUD + 409 if still attached |
@@ -257,10 +260,10 @@ git commit -m "chore: scaffold npm workspaces and shared types"
 
 **Files:**
 - Create: `docker-compose.yml`
-- Create: `apps/api/prisma/schema.prisma` (generator + datasource only)
 - Test: none (infra). Verify with `pg_isready`.
+- Do **not** add Prisma. TypeORM entities are Task 4.
 
-- [ ] **Step 1: Write Compose and empty Prisma schema**
+- [ ] **Step 1: Write Compose**
 
 `docker-compose.yml`:
 
@@ -286,36 +289,20 @@ volumes:
   pgdata:
 ```
 
-`apps/api/prisma/schema.prisma`:
-
-```prisma
-generator client {
-  provider = "prisma-client-js"
-}
-
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
-```
-
 Copy `.env.example` to `.env` and set `DATABASE_URL=postgresql://kb:kb@localhost:5432/kb?schema=public`.
 
 - [ ] **Step 2: Start db and verify health**
 
-Run: `docker compose up db -d`  
+Run: `docker compose up db -d` (or `podman compose up db -d`)  
 Expected: container started.
 
-Run: `docker compose ps`  
-Expected: `db` state `healthy` (wait ~10s and re-run if starting).
-
-Run: `docker compose exec db pg_isready -U kb -d kb`  
+Run: `podman compose exec db pg_isready -U kb -d kb`  
 Expected: `accepting connections`.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add docker-compose.yml apps/api/prisma/schema.prisma
+git add docker-compose.yml
 git commit -m "chore: add Postgres via Docker Compose"
 ```
 
@@ -659,199 +646,71 @@ git commit -m "feat(api): bootstrap Nest with health and error filter"
 
 ---
 
-### Task 4: Prisma models + first migration
+### Task 4: TypeORM entities + first migration
 
 **Files:**
-- Modify: `apps/api/package.json` (add prisma)
-- Modify: `apps/api/prisma/schema.prisma`
-- Create: `apps/api/src/prisma/prisma.service.ts`
-- Create: `apps/api/src/prisma/prisma.module.ts`
-- Modify: `apps/api/src/app.module.ts` (import PrismaModule)
-- Create: migration under `apps/api/prisma/migrations/` (generated)
+- Modify: `apps/api/package.json` (`typeorm`, `pg`, `@nestjs/typeorm` if peer allows)
+- Delete: `apps/api/prisma/` leftover
+- Create: `apps/api/src/entities/topic.entity.ts` (and tag, note, note-tag, question)
+- Create: `apps/api/src/database/data-source.ts` (CLI migrations)
+- Create: `apps/api/src/migrations/*Init*.ts` plus FTS SQL
+- Modify: `apps/api/src/app.module.ts` (`TypeOrmModule.forRoot` or custom DataSource module)
 
-- [ ] **Step 1: Add Prisma deps**
+`synchronize: false`. Unique slug/name → catch `QueryFailedError` driver code `23505`.
 
-From repo root:
+- [ ] **Step 1: Add TypeORM deps**
 
 ```bash
-npm install @prisma/client -w api
-npm install -D prisma -w api
+npm install typeorm pg -w api
+npm install @nestjs/typeorm -w api
 ```
 
-Add scripts to `apps/api/package.json`:
+If `@nestjs/typeorm` peer-fails on Nest 12 (same class of issue as `@nestjs/config`), skip it and register a `DataSource` provider yourself. Add scripts:
 
 ```json
-"prisma:migrate": "prisma migrate dev",
-"prisma:generate": "prisma generate"
+"typeorm": "typeorm-ts-node-commonjs -d src/database/data-source.ts",
+"migration:run": "npm run typeorm -- migration:run",
+"migration:generate": "npm run typeorm -- migration:generate"
 ```
 
-- [ ] **Step 2: Write full schema**
+- [ ] **Step 2: Entities (same columns as spec)**
 
-Replace `apps/api/prisma/schema.prisma` with:
+- `Topic`: uuid PK, name, unique slug, nullable `parentId` self-FK, `createdAt`
+- `Tag`: uuid PK, unique name, unique slug, `createdAt`
+- `Note`: uuid PK, title, `bodyMarkdown`, nullable `topicId`, `createdAt`, `updatedAt`; OneToMany questions; ManyToMany via `NoteTag`
+- `NoteTag`: composite PK `noteId`+`tagId`; onDelete CASCADE from Note
+- `Question`: uuid PK, `noteId` CASCADE, prompt, `choiceA`–`choiceD`, enum `correctChoice` A|B|C|D, nullable `explanationMarkdown`, enum `source` manual|ai, timestamps
 
-```prisma
-generator client {
-  provider = "prisma-client-js"
-}
+Do **not** map `search_vector` on the Note entity.
 
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
+- [ ] **Step 3: Migrate (db from Task 2 must be up)**
 
-enum CorrectChoice {
-  A
-  B
-  C
-  D
-}
-
-enum QuestionSource {
-  manual
-  ai
-}
-
-model Topic {
-  id        String   @id @default(uuid())
-  name      String
-  slug      String   @unique
-  parentId  String?
-  parent    Topic?   @relation("TopicTree", fields: [parentId], references: [id])
-  children  Topic[]  @relation("TopicTree")
-  notes     Note[]
-  createdAt DateTime @default(now())
-}
-
-model Tag {
-  id        String    @id @default(uuid())
-  name      String    @unique
-  slug      String    @unique
-  notes     NoteTag[]
-  createdAt DateTime  @default(now())
-}
-
-model Note {
-  id            String    @id @default(uuid())
-  title         String
-  bodyMarkdown  String
-  topicId       String?
-  topic         Topic?    @relation(fields: [topicId], references: [id])
-  tags          NoteTag[]
-  questions     Question[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-}
-
-model NoteTag {
-  noteId String
-  tagId  String
-  note   Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
-  tag    Tag  @relation(fields: [tagId], references: [id])
-
-  @@id([noteId, tagId])
-}
-
-model Question {
-  id                    String         @id @default(uuid())
-  noteId                String
-  note                  Note           @relation(fields: [noteId], references: [id], onDelete: Cascade)
-  prompt                String
-  choiceA               String
-  choiceB               String
-  choiceC               String
-  choiceD               String
-  correctChoice         CorrectChoice
-  explanationMarkdown   String?
-  source                QuestionSource
-  createdAt             DateTime       @default(now())
-  updatedAt             DateTime       @updatedAt
-}
-```
-
-- [ ] **Step 3: Migrate (db must be up from Task 2)**
-
-```bash
-cd apps/api && npx prisma migrate dev --name init && cd ../..
-```
-
-Expected: `apps/api/prisma/migrations/<timestamp>_init/migration.sql` created; client generated.
-
-Then append FTS to a **new** SQL migration. Create file `apps/api/prisma/migrations/<new_ts>_note_fts/migration.sql` by running:
-
-```bash
-cd apps/api && npx prisma migrate dev --name note_fts --create-only && cd ../..
-```
-
-Replace that new `migration.sql` body with:
+Generate/run initial migration against `DATABASE_URL`. Then a second migration with:
 
 ```sql
-ALTER TABLE "Note"
+ALTER TABLE "note"
   ADD COLUMN "search_vector" tsvector
   GENERATED ALWAYS AS (
-    to_tsvector('english', coalesce("title", '') || ' ' || coalesce("bodyMarkdown", ''))
+    to_tsvector('english', coalesce(title, '') || ' ' || coalesce("bodyMarkdown", ''))
   ) STORED;
 
-CREATE INDEX "Note_search_vector_idx" ON "Note" USING GIN ("search_vector");
+CREATE INDEX "note_search_vector_idx" ON "note" USING GIN ("search_vector");
 ```
 
-Then:
+Adjust quoted identifiers to match TypeORM’s actual table/column names (`note` vs `"Note"`). Search in Task 7 uses `dataSource.query` + `plainto_tsquery`.
 
-```bash
-cd apps/api && npx prisma migrate dev && cd ../..
-```
+- [ ] **Step 4: Wire Nest**
 
-Expected: FTS migration applied. Do **not** add `search_vector` to the Prisma models; Notes search in Task 7 uses `$queryRaw`.
+`AppModule` imports TypeORM `forRoot` (`type: 'postgres'`, `url: process.env.DATABASE_URL`, `entities`, `migrations`, `synchronize: false`) **or** a custom module that `initialize()` a `DataSource` on boot. Health still works.
 
-- [ ] **Step 4: Prisma module**
-
-`apps/api/src/prisma/prisma.service.ts`:
-
-```ts
-import { Injectable, OnModuleInit } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
-
-@Injectable()
-export class PrismaService extends PrismaClient implements OnModuleInit {
-  async onModuleInit() {
-    await this.$connect();
-  }
-}
-```
-
-`apps/api/src/prisma/prisma.module.ts`:
-
-```ts
-import { Global, Module } from '@nestjs/common';
-import { PrismaService } from './prisma.service';
-
-@Global()
-@Module({
-  providers: [PrismaService],
-  exports: [PrismaService],
-})
-export class PrismaModule {}
-```
-
-Update `apps/api/src/app.module.ts`:
-
-```ts
-import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { HealthController } from './health/health.controller';
-import { PrismaModule } from './prisma/prisma.module';
-
-@Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true }), PrismaModule],
-  controllers: [HealthController],
-})
-export class AppModule {}
-```
+Delete `apps/api/prisma/` if present.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/api/prisma apps/api/src/prisma apps/api/src/app.module.ts apps/api/package.json package-lock.json
-git commit -m "feat(api): add Prisma models and FTS migration"
+git add apps/api/src/entities apps/api/src/database apps/api/src/migrations apps/api/src/app.module.ts apps/api/package.json package-lock.json
+git add -u apps/api/prisma
+git commit -m "feat(api): add TypeORM entities and FTS migration"
 ```
 
 **Stop. Ask for review of Task 4.**
@@ -1129,21 +988,7 @@ export class HealthController {
 }
 ```
 
-`apps/api/src/app.module.ts`:
-
-```ts
-import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { AuthModule } from './auth/auth.module';
-import { HealthController } from './health/health.controller';
-import { PrismaModule } from './prisma/prisma.module';
-
-@Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true }), PrismaModule, AuthModule],
-  controllers: [HealthController],
-})
-export class AppModule {}
-```
+`apps/api/src/app.module.ts`: keep the TypeORM root module from Task 4; add `AuthModule` to `imports`. Do not add Prisma. (This repo also does not use `ConfigModule` — env is `load-env.ts`.)
 
 Google Cloud Console: create OAuth client (Web), authorized redirect `http://localhost:4000/auth/google/callback`, put client id/secret and your email in `.env` `ADMIN_EMAILS`.
 
@@ -1168,6 +1013,8 @@ git commit -m "feat(api): add Google OAuth, JWT cookie, and email whitelist"
 
 ### Task 6: Topics + Tags CRUD
 
+Implement with TypeORM `Repository<Topic>` / `Repository<Tag>` / `Repository<Note>`. Unique conflict = Postgres `23505`. Code samples below may still show a `prisma` variable — treat that as the repository API to translate; do not add the Prisma package.
+
 **Files:**
 - Create: `apps/api/src/topics/topics.service.ts`
 - Create: `apps/api/src/topics/topics.controller.ts`
@@ -1181,7 +1028,7 @@ git commit -m "feat(api): add Google OAuth, JWT cookie, and email whitelist"
 - Test: `apps/api/src/topics/topics.service.spec.ts`
 - Test: `apps/api/src/tags/tags.service.spec.ts`
 
-- [ ] **Step 1: Write failing service tests (mocked Prisma)**
+- [ ] **Step 1: Write failing service tests (mocked TypeORM repositories)**
 
 `apps/api/src/topics/topics.service.spec.ts`:
 
@@ -3703,7 +3550,7 @@ COPY packages/shared ./packages/shared
 COPY apps/api ./apps/api
 RUN npm install
 WORKDIR /repo/apps/api
-RUN npx prisma generate
+RUN npx typeorm migration:run -d dist/database/data-source.js
 CMD ["npx", "nest", "start"]
 ```
 
@@ -3774,13 +3621,13 @@ Google callback stays `http://localhost:4000/auth/google/callback` (browser talk
 On api container start, run migrations once:
 
 ```bash
-docker compose exec api npx prisma migrate deploy
+docker compose exec api npm run migration:run
 ```
 
-(or add to api CMD: `npx prisma migrate deploy && npx nest start`). Prefer updating api `CMD`:
+(or add to api CMD: `npm run migration:run && npx nest start`). Prefer updating api `CMD`:
 
 ```
-CMD ["sh", "-c", "npx prisma migrate deploy && npx nest start"]
+CMD ["sh", "-c", "npm run migration:run && npx nest start"]
 ```
 
 - [ ] **Step 2: Smoke**
@@ -3830,4 +3677,4 @@ git commit -m "chore: run web, api, and postgres with Docker Compose"
 | Compose local, not cloud | 2, 17 |
 | Portfolio / mock / multi-user | not in this plan |
 
-Cookie name is `kb_access_token` everywhere. JSON question fields are `choiceA`…`correctChoice`. Prisma fields are `choiceA`…`correctChoice` (Prisma client camelCase).
+Cookie name is `kb_access_token` everywhere. JSON and TypeORM entity fields for questions are `choiceA`…`correctChoice` (camelCase).

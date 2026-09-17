@@ -59,7 +59,7 @@ personal_project/
 
 **Package manager:** npm workspaces (root `package.json` with `apps/*` and `packages/*`).
 
-**ORM:** Prisma on `apps/api`, schema in `apps/api/prisma/schema.prisma`. Migrations committed in git.
+**ORM:** TypeORM on `apps/api` via `@nestjs/typeorm` (or a thin `DataSource` wrapper if the Nest 12 peer range lags). Entities under `apps/api/src/**/*.entity.ts`. SQL migrations committed in git (`apps/api/src/migrations/`). No Prisma.
 
 **Why this split:** Next.js is for learning frontend. NestJS keeps HTTP, auth, and domain logic in a familiar backend. Shared types reduce drift. One compose file is enough system-design practice before cloud.
 
@@ -154,10 +154,10 @@ Each module has one job and talks through its service, not another module’s in
 | Module | Responsibility | Depends on |
 |---|---|---|
 | Auth | Google OAuth, JWT cookie, `ADMIN_EMAILS` | config |
-| Topics | CRUD + tree parent rules | Prisma |
-| Tags | CRUD + attach rules | Prisma |
-| Notes | CRUD, list filters, search, tag attach | Prisma, Topics, Tags |
-| Questions | CRUD scoped to a note | Prisma, Notes |
+| Topics | CRUD + tree parent rules | TypeORM `Topic` repo |
+| Tags | CRUD + attach rules | TypeORM `Tag` repo |
+| Notes | CRUD, list filters, search, tag attach | TypeORM `Note` / `NoteTag` repos, Topics, Tags |
+| Questions | CRUD scoped to a note | TypeORM `Question` repo, Notes |
 | Ai | provider client, three actions | Notes, Questions, config |
 
 `packages/shared` holds request/response types used by both api DTO classes (or mapped from them) and the Next client.
@@ -261,7 +261,7 @@ Messages never include API keys or raw provider payloads. Validation errors incl
 
 **api**
 
-- Unit (Prisma mocked): provider URL/key mapping; summarize/expand do not persist; generate-questions inserts ABCD rows with `source=ai` and valid `correct_choice`; invalid AI items are dropped.
+- Unit (TypeORM repos mocked): provider URL/key mapping; summarize/expand do not persist; generate-questions inserts ABCD rows with `source=ai` and valid `correct_choice`; invalid AI items are dropped.
 - API e2e (supertest + the Compose Postgres): whitelist 403 vs happy JWT path (Google OAuth mocked); note CRUD; ABCD question 400 on invalid choice; 404; 409 slug; AI timeout mocked.
 
 **web**
@@ -292,12 +292,12 @@ Work top to bottom. Check a box only after review passes.
 ### Setup
 
 - [ ] **1. Repo skeleton** — npm workspaces, `apps/web`, `apps/api`, `packages/shared`, root `.env.example`, `.gitignore`. `npm install` works from root.
-- [ ] **2. Docker Compose + Postgres** — `db` service healthy; `DATABASE_URL` documented; Prisma schema file exists (even if empty models). `docker compose up db` works.
+- [ ] **2. Docker Compose + Postgres** — `db` service healthy; `DATABASE_URL` documented. `docker compose up db` (or `podman compose`) works.
 
 ### API foundation
 
 - [ ] **3. NestJS bootstrap** — app listens on `:4000`, health `GET /health`, global error filter `{ error: { code, message } }`, CORS for `WEB_ORIGIN` with credentials.
-- [ ] **4. Prisma models + first migration** — Topic, Tag, Note, NoteTag, Question (ABCD columns + `correct_choice`). Migration committed.
+- [ ] **4. TypeORM entities + first migration** — Topic, Tag, Note, NoteTag, Question (ABCD columns + `correctChoice`). Migration committed; leftover `apps/api/prisma/` removed if present.
 - [ ] **5. Auth** — Google OAuth, JWT httpOnly cookie, `ADMIN_EMAILS` whitelist, `/auth/me`, `/auth/logout`. Non-whitelist → 403. Unauthenticated API → 401.
 
 ### Knowledge API
@@ -320,7 +320,7 @@ Work top to bottom. Check a box only after review passes.
 
 ### Tests and local bar
 
-- [ ] **15. API tests** — unit (mocked Prisma/LLM) + e2e supertest (auth, note CRUD, ABCD validation, 409, AI timeout mocked).
+- [ ] **15. API tests** — unit (mocked TypeORM repos + LLM) + e2e supertest (auth, note CRUD, ABCD validation, 409, AI timeout mocked).
 - [ ] **16. Web component tests** — editor Save, empty state, AI banner/Retry.
 - [ ] **17. Compose whole stack** — `docker compose up` runs web + api + db; smoke: login, create note, add ABCD question, run one AI action if keys exist.
 
@@ -339,7 +339,7 @@ Work top to bottom. Check a box only after review passes.
 | First slice | Knowledge base, then practice | Practice-first; thin both |
 | Taxonomy | User-defined topics/tags | Fixed interview tracks |
 | Users in v1 | None; JWT email only | users table “for later” |
-| Stack | Next.js + NestJS + PostgreSQL | Next-only fullstack; Vite SPA |
+| Stack | Next.js + NestJS + PostgreSQL + **TypeORM** | Next-only fullstack; Prisma |
 | Architecture | Modular monolith monorepo | Next BFF; queues + two repos |
 | AI | OpenAI + DeepSeek, sync | Single provider only; full agnostic gateway |
 | Auth | Google OAuth + whitelist | password; env-only gate |
@@ -347,4 +347,5 @@ Work top to bottom. Check a box only after review passes.
 | Note shape | Markdown + attached **ABCD MCQ** | Wiki-only; free-text Q&A |
 | AI write policy | Preview then Apply; generate-questions inserts ABCD drafts | Autowrite into note |
 | Save | Explicit Save | Autosave |
+| ORM | TypeORM entities + SQL migrations | Prisma |
 | Implementation | Owner does checklist items; review after each | Agent implements the whole v1 unattended |
