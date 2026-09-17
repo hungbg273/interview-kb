@@ -1,0 +1,5 @@
+{
+  "name": "interview-knowledge-base",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"]
+}
