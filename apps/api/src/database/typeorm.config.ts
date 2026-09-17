@@ -7,10 +7,15 @@ import { Tag } from '../entities/tag.entity';
 import { Topic } from '../entities/topic.entity';
 import { InitSchema1760000000001 } from '../migrations/1760000000001-InitSchema';
 import { NoteFts1760000000002 } from '../migrations/1760000000002-NoteFts';
+import { NoteBodyLength1760000000003 } from '../migrations/1760000000003-NoteBodyLength';
 
 export const entities = [Topic, Tag, Note, NoteTag, Question];
 
-export const migrations = [InitSchema1760000000001, NoteFts1760000000002];
+export const migrations = [
+  InitSchema1760000000001,
+  NoteFts1760000000002,
+  NoteBodyLength1760000000003,
+];
 
 export function typeormOptions(): DataSourceOptions {
   const url = process.env.DATABASE_URL;

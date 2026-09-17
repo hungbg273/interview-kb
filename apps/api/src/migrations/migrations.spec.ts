@@ -1,5 +1,6 @@
 import { InitSchema1760000000001 } from './1760000000001-InitSchema';
 import { NoteFts1760000000002 } from './1760000000002-NoteFts';
+import { NoteBodyLength1760000000003 } from './1760000000003-NoteBodyLength';
 
 function collectSql(fn: (runner: { query: (sql: string) => Promise<void> }) => Promise<void>) {
   const statements: string[] = [];
@@ -33,5 +34,13 @@ describe('schema migrations', () => {
     expect(sql).toMatch(/to_tsvector\('english'/);
     expect(sql).toMatch(/body_markdown/);
     expect(sql).toMatch(/USING GIN/);
+  });
+
+  it('limits note body_markdown to 100000 characters', async () => {
+    const sql = await collectSql((runner) =>
+      new NoteBodyLength1760000000003().up(runner as never),
+    );
+    expect(sql).toMatch(/note_body_markdown_length/);
+    expect(sql).toMatch(/char_length\(body_markdown\) <= 100000/);
   });
 });

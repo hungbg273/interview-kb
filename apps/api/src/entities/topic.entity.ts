@@ -6,6 +6,7 @@ import {
   ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
+  RelationId,
 } from 'typeorm';
 import { Note } from './note.entity';
 
@@ -20,12 +21,12 @@ export class Topic {
   @Column({ type: 'varchar', unique: true })
   slug: string;
 
-  @Column({ type: 'uuid', nullable: true, name: 'parent_id' })
-  parentId: string | null;
-
   @ManyToOne(() => Topic, (topic) => topic.children, { nullable: true })
   @JoinColumn({ name: 'parent_id' })
   parent: Topic | null;
+
+  @RelationId((topic: Topic) => topic.parent)
+  parentId: string | null;
 
   @OneToMany(() => Topic, (topic) => topic.parent)
   children: Topic[];

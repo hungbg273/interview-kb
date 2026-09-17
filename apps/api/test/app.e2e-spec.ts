@@ -63,4 +63,13 @@ describe('API bootstrap (e2e)', () => {
     `);
     expect(tables).toHaveLength(0);
   });
+
+  it('rejects note body longer than 100000 characters', async () => {
+    const dataSource = app.get(DataSource);
+    const constraints: Array<{ conname: string }> = await dataSource.query(`
+      SELECT conname FROM pg_constraint
+      WHERE conname = 'note_body_markdown_length'
+    `);
+    expect(constraints).toHaveLength(1);
+  });
 });

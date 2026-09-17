@@ -6,6 +6,7 @@ import {
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
+  RelationId,
   UpdateDateColumn,
 } from 'typeorm';
 import { Note } from './note.entity';
@@ -15,12 +16,12 @@ export class Question {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'uuid', name: 'note_id' })
-  noteId: string;
-
   @ManyToOne(() => Note, (note) => note.questions, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'note_id' })
   note: Note;
+
+  @RelationId((question: Question) => question.note)
+  noteId: string;
 
   @Column({ type: 'text' })
   prompt: string;
@@ -37,13 +38,22 @@ export class Question {
   @Column({ type: 'varchar', name: 'choice_d', length: 2000 })
   choiceD: string;
 
-  @Column({ type: 'enum', enum: ['A', 'B', 'C', 'D'], name: 'correct_choice' })
+  @Column({
+    type: 'enum',
+    enum: ['A', 'B', 'C', 'D'],
+    enumName: 'question_correct_choice',
+    name: 'correct_choice',
+  })
   correctChoice: CorrectChoice;
 
   @Column({ type: 'text', nullable: true, name: 'explanation_markdown' })
   explanationMarkdown: string | null;
 
-  @Column({ type: 'enum', enum: ['manual', 'ai'] })
+  @Column({
+    type: 'enum',
+    enum: ['manual', 'ai'],
+    enumName: 'question_source',
+  })
   source: QuestionSource;
 
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
