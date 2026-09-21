@@ -32,4 +32,24 @@ export class AppError extends HttpException {
   static forbidden(message = 'Forbidden') {
     return new AppError(ERROR_CODES.FORBIDDEN, message, HttpStatus.FORBIDDEN);
   }
+
+  static aiNotConfigured(message = 'API key missing for provider') {
+    return new AppError(
+      ERROR_CODES.AI_NOT_CONFIGURED,
+      message,
+      HttpStatus.SERVICE_UNAVAILABLE,
+    );
+  }
+
+  static aiTimeout(message = 'AI request timed out') {
+    return new AppError(
+      ERROR_CODES.AI_TIMEOUT,
+      message,
+      HttpStatus.GATEWAY_TIMEOUT,
+    );
+  }
+
+  static aiUpstream(message = 'Provider error') {
+    return new AppError(ERROR_CODES.AI_UPSTREAM, message, HttpStatus.BAD_GATEWAY);
+  }
 }

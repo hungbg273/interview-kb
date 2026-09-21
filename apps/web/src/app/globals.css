@@ -1,0 +1,6 @@
+body { font-family: system-ui, sans-serif; margin: 0; color: #111; background: #fff; }
+main { max-width: 960px; margin: 0 auto; padding: 24px; }
+a { color: inherit; }
+button, input, textarea, select { font: inherit; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.error { color: #b00020; }

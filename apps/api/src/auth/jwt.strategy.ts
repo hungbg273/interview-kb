@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { isAdminEmail } from '@kb/shared';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import type { Request } from 'express';
 import { ExtractJwt, Strategy } from 'passport-jwt';
@@ -23,6 +24,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   validate(payload: JwtPayload): JwtPayload {
+    if (!isAdminEmail(payload.email, process.env.ADMIN_EMAILS ?? '')) {
+      throw new UnauthorizedException();
+    }
     return payload;
   }
 }

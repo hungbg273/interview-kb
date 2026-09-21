@@ -32,7 +32,13 @@ export class AppErrorFilter implements ExceptionFilter {
               ? ERROR_CODES.NOT_FOUND
               : status === HttpStatus.CONFLICT
                 ? ERROR_CODES.CONFLICT
-                : ERROR_CODES.VALIDATION;
+                : status === HttpStatus.BAD_GATEWAY
+                  ? ERROR_CODES.AI_UPSTREAM
+                  : status === HttpStatus.GATEWAY_TIMEOUT
+                    ? ERROR_CODES.AI_TIMEOUT
+                    : status === HttpStatus.SERVICE_UNAVAILABLE
+                      ? ERROR_CODES.AI_NOT_CONFIGURED
+                      : ERROR_CODES.VALIDATION;
 
       return res.status(status).json({ error: { code, message } });
     }

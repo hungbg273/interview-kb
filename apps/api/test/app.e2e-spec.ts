@@ -87,4 +87,25 @@ describe('API bootstrap (e2e)', () => {
     expect(res.body.paths['/health']).toBeDefined();
     expect(res.body.paths['/auth/me']).toBeDefined();
   });
+
+  it('POST /topics without cookie is 401', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/topics')
+      .send({ name: 'TCP' })
+      .expect(401);
+    expect(res.body.error.code).toBe('UNAUTHENTICATED');
+  });
+
+  it('POST /notes/:id/ai without cookie is 401', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/notes/00000000-0000-0000-0000-000000000001/ai')
+      .send({ action: 'summarize', provider: 'openai' })
+      .expect(401);
+    expect(res.body.error.code).toBe('UNAUTHENTICATED');
+  });
+
+  it('OpenAPI documents POST /notes/{id}/ai', async () => {
+    const res = await request(app.getHttpServer()).get('/docs-json').expect(200);
+    expect(res.body.paths['/notes/{id}/ai']?.post).toBeDefined();
+  });
 });

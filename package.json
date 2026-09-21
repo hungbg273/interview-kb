@@ -1,5 +1,10 @@
 {
   "name": "interview-knowledge-base",
   "private": true,
-  "workspaces": ["apps/*", "packages/*"]
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "test": "npm run test -w api && npm run test -w web",
+    "dev:api": "npm run start:dev -w api",
+    "dev:web": "npm run dev -w web"
+  }
 }
