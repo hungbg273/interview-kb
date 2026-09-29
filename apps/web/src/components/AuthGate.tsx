@@ -24,7 +24,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       });
   }, [router]);
 
-  if (!ready || !email) return <main>Đang tải…</main>;
+  if (!ready || !email) return <main className="empty">Đang tải…</main>;
 
   async function logout() {
     await api('/auth/logout', { method: 'POST' });
@@ -33,10 +33,10 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <header className="row" style={{ padding: 16, borderBottom: '1px solid #ddd' }}>
+      <header className="topbar">
         <a href="/">Ghi chú</a>
         <a href="/topics">Chủ đề</a>
-        <span style={{ marginLeft: 'auto' }}>{email}</span>
+        <span className="who">{email}</span>
         <button type="button" onClick={logout}>
           Đăng xuất
         </button>

@@ -1,4 +1,5 @@
 import { INestApplication } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
@@ -107,5 +108,61 @@ describe('API bootstrap (e2e)', () => {
   it('OpenAPI documents POST /notes/{id}/ai', async () => {
     const res = await request(app.getHttpServer()).get('/docs-json').expect(200);
     expect(res.body.paths['/notes/{id}/ai']?.post).toBeDefined();
+  });
+
+  function cookie() {
+    const allow = process.env.ADMIN_EMAILS?.split(',')[0]?.trim() || 'you@example.com';
+    process.env.ADMIN_EMAILS = process.env.ADMIN_EMAILS || allow;
+    const token = app.get(JwtService).sign({ sub: allow, email: allow });
+    return `kb_access_token=${token}`;
+  }
+
+  it('GET /auth/me with JWT cookie returns the email', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/auth/me')
+      .set('Cookie', cookie())
+      .expect(200);
+    expect(res.body.email).toEqual(expect.any(String));
+  });
+
+  it('note CRUD rejects invalid ABCD and unknown ids', async () => {
+    const auth = cookie();
+    const http = request(app.getHttpServer());
+    const created = await http
+      .post('/notes')
+      .set('Cookie', auth)
+      .send({ title: `TCP ${Date.now()}`, bodyMarkdown: 'reliable' })
+      .expect(201);
+    const id = created.body.id as string;
+
+    await http.get(`/notes/${id}`).set('Cookie', auth).expect(200);
+
+    await http
+      .post(`/notes/${id}/questions`)
+      .set('Cookie', auth)
+      .send({
+        prompt: 'Q',
+        choiceA: 'a',
+        choiceB: 'b',
+        choiceC: 'c',
+        choiceD: 'd',
+        correctChoice: 'E',
+      })
+      .expect(400);
+
+    await http
+      .get('/notes/00000000-0000-0000-0000-000000000000')
+      .set('Cookie', auth)
+      .expect(404);
+
+    await http.delete(`/notes/${id}`).set('Cookie', auth).expect(204);
+  });
+
+  it('409 duplicate topic slug', async () => {
+    const auth = cookie();
+    const name = `UniqueTopic${Date.now()}`;
+    const http = request(app.getHttpServer());
+    await http.post('/topics').set('Cookie', auth).send({ name }).expect(201);
+    await http.post('/topics').set('Cookie', auth).send({ name }).expect(409);
   });
 });

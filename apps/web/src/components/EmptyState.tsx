@@ -8,7 +8,7 @@ export function EmptyState({
   onAction: () => void;
 }) {
   return (
-    <div>
+    <div className="empty">
       <p>{message}</p>
       <button type="button" onClick={onAction}>
         {actionLabel}

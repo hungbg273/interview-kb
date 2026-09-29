@@ -39,13 +39,13 @@ function NoteList() {
 
   return (
     <main>
-      <div className="row">
+      <div className="page-head">
         <h1>Ghi chú</h1>
         <button type="button" onClick={() => router.push('/notes/new')}>
           Tạo ghi chú
         </button>
       </div>
-      <div className="row">
+      <div className="toolbar">
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tìm kiếm" />
         <select value={topicId} onChange={(e) => setTopicId(e.target.value)}>
           <option value="">Tất cả chủ đề</option>
@@ -74,7 +74,7 @@ function NoteList() {
           onAction={() => router.push('/notes/new')}
         />
       ) : (
-        <ul>
+        <ul className="cards">
           {items.map((n) => (
             <li key={n.id}>
               <a href={`/notes/${n.id}`}>{n.title}</a>

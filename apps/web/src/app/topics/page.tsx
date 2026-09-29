@@ -34,7 +34,7 @@ function TopicsInner() {
   return (
     <main>
       <h1>Chủ đề</h1>
-      <div className="row">
+      <div className="toolbar">
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -48,7 +48,7 @@ function TopicsInner() {
       {topics.length === 0 ? (
         <EmptyState message="Chưa có chủ đề" actionLabel="Tạo chủ đề" onAction={create} />
       ) : (
-        <ul>
+        <ul className="cards">
           {topics.map((t) => (
             <li key={t.id}>{t.name}</li>
           ))}
