@@ -94,6 +94,10 @@ export class TopicsService {
     return this.topics.searchByName(q);
   }
 
+  listNames() {
+    return this.topics.listNames(40);
+  }
+
   private async require(id: string, message = 'Topic not found') {
     const row = await this.topics.findById(id);
     if (!row) throw AppError.notFound(message);

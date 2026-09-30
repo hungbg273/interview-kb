@@ -9,6 +9,12 @@ import { QuestionsRepository } from '../database/questions.repository';
 import { Note } from '../entities/note.entity';
 import { Question } from '../entities/question.entity';
 import { LlmClient, type ProviderEnv } from '../ai/llm.client';
+import {
+  DOC_CONTEXT_CHARS,
+  LONG_DOC_CHARS,
+  clipText,
+  parseLlmJsonArray,
+} from '../ai/llm-json';
 import { TopicsService } from '../topics/topics.service';
 import { DocumentExtractor } from './document-extractor';
 
@@ -51,15 +57,6 @@ type StartInput = {
   mime: string;
   buffer: Buffer;
 };
-
-function parseJsonArray(raw: string): unknown[] {
-  try {
-    const parsed = JSON.parse(raw.replace(/^```json\n?|```$/g, '').trim());
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
 
 function env(): ProviderEnv {
   return {
@@ -108,14 +105,43 @@ export class PracticeImportService {
     const text = (await this.extractor.extract(input.buffer, input.mime, input.filename)).trim();
     if (!text) throw AppError.validation('Could not read text from the file');
 
+    const catalog = await this.topics.listNames();
+    const clipped = clipText(text, DOC_CONTEXT_CHARS);
+    const sourceHint =
+      input.source === 'cv'
+        ? 'Ask about the stack and roles in the CV. Do not invent employers or skills.'
+        : 'Ask about JD requirements and typical gaps. Do not invent company facts.';
+    const catalogLine = catalog.length
+      ? `Topic catalog: ${catalog.join(', ')}`
+      : 'Topic catalog: (empty)';
+    const quizSystem = `You are an interview coach. Return JSON {"items":[...]} of exactly 8 multiple-choice items. Language: ${LANG[input.lang]}. Seniority level: ${input.level}. ${sourceHint} Each item: prompt, choiceA, choiceB, choiceC, choiceD, correctChoice (A|B|C|D), explanationMarkdown, suggestedTopics (pick only from the catalog; [] if none fit). Exactly one correctChoice.`;
+
+    let sourceBlock = `${input.source.toUpperCase()}: ${input.filename}\n${catalogLine}\n\n${clipped}`;
+    if (text.length > LONG_DOC_CHARS) {
+      const extracted = await this.llm.complete({
+        provider: 'openai',
+        env: env(),
+        json: true,
+        temperature: 0,
+        maxTokens: 800,
+        system:
+          'Extract interview-relevant facts from the document. Return JSON {"facts":{"role":"","skills":[],"highlights":[]}}. No questions.',
+        user: clipped,
+      });
+      sourceBlock = `${input.source.toUpperCase()}: ${input.filename}\n${catalogLine}\n\n${extracted}`;
+    }
+
     const raw = await this.llm.complete({
       provider: 'openai',
       env: env(),
-      system: `Return ONLY a JSON array of exactly 8 multiple-choice items. Write prompt, choices, explanationMarkdown, and suggestedTopics in ${LANG[input.lang]}. Seniority level: ${input.level}. Mix technical and product interview questions from the document. Each item: prompt, choiceA, choiceB, choiceC, choiceD, correctChoice (A|B|C|D), explanationMarkdown, suggestedTopics (string array). Exactly one correctChoice.`,
-      user: `${input.source.toUpperCase()}: ${input.filename}\n\n${text}`,
+      json: true,
+      temperature: 0.4,
+      maxTokens: 2000,
+      system: quizSystem,
+      user: sourceBlock,
     });
 
-    const parsed = parseJsonArray(raw)
+    const parsed = parseLlmJsonArray(raw)
       .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
       .filter((item) => isValidMcq(item as never))
       .slice(0, 8)
@@ -133,7 +159,9 @@ export class PracticeImportService {
             typeof item.explanationMarkdown === 'string'
               ? item.explanationMarkdown.trim()
               : null,
-          suggestedTopics: topicNamesOf(item),
+          suggestedTopics: topicNamesOf(item).filter((name) =>
+            catalog.some((itemName) => itemName.toLowerCase() === name.toLowerCase()),
+          ),
         } satisfies DraftQuestion;
       });
 

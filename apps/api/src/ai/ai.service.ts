@@ -7,19 +7,32 @@ import { Note } from '../entities/note.entity';
 import { Question } from '../entities/question.entity';
 import { RunAiDto } from './dto';
 import { LlmClient, type ProviderEnv } from './llm.client';
+import { NOTE_CONTEXT_CHARS, STEM_LIMIT, clipText, parseLlmJsonArray } from './llm-json';
 
 const LANG: Record<AiLang, string> = {
   en: 'English',
   vi: 'Vietnamese',
 };
 
-function parseJsonArray(raw: string): unknown[] {
-  try {
-    const parsed = JSON.parse(raw.replace(/^```json\n?|```$/g, '').trim());
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+function providerEnv(): ProviderEnv {
+  return {
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+    OPENAI_BASE_URL: process.env.OPENAI_BASE_URL,
+    OPENAI_MODEL: process.env.OPENAI_MODEL,
+    DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY,
+    DEEPSEEK_BASE_URL: process.env.DEEPSEEK_BASE_URL,
+    DEEPSEEK_MODEL: process.env.DEEPSEEK_MODEL,
+  };
+}
+
+function noteContext(note: Note) {
+  return `Title: ${note.title}\n\n${clipText(note.bodyMarkdown ?? '', NOTE_CONTEXT_CHARS)}`;
+}
+
+function topicNamesOf(note: Note): string[] {
+  return (note.noteTopics ?? [])
+    .map((row) => row.topic?.name)
+    .filter((name): name is string => Boolean(name));
 }
 
 @Injectable()
@@ -31,32 +44,26 @@ export class AiService {
   ) {}
 
   async run(noteId: string, dto: RunAiDto) {
-    const note = await this.notes.findById(noteId);
+    const note = await this.notes.findById(noteId, ['noteTopics', 'noteTopics.topic']);
     if (!note) throw AppError.notFound('Note not found');
 
-    const env: ProviderEnv = {
-      OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-      OPENAI_BASE_URL: process.env.OPENAI_BASE_URL,
-      OPENAI_MODEL: process.env.OPENAI_MODEL,
-      DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY,
-      DEEPSEEK_BASE_URL: process.env.DEEPSEEK_BASE_URL,
-      DEEPSEEK_MODEL: process.env.DEEPSEEK_MODEL,
-    };
-
-    const body = `Title: ${note.title}\n\n${note.bodyMarkdown}`;
+    const env = providerEnv();
+    const body = noteContext(note);
 
     if (dto.action === 'summarize' || dto.action === 'expand' || dto.action === 'generate-content') {
       const system =
         dto.action === 'summarize'
-          ? 'Summarize the note in Markdown. Do not invent facts.'
+          ? 'Summarize the note in the same language. Plain language. Do not invent facts.'
           : dto.action === 'expand'
-            ? 'Expand the note in Markdown with more interview-relevant detail. Do not invent APIs.'
-            : 'Write a complete interview study note in Markdown from the title and any existing draft. Match the language of the title. Do not invent APIs or fake RFCs.';
+            ? 'Expand the note with interview-relevant detail. Plain language. Do not invent APIs or RFCs.'
+            : 'Write a complete interview study note from the title and any draft. Match the title language. Short headings are ok. Do not invent APIs or fake RFCs.';
       const markdown = await this.llm.complete({
         provider: dto.provider,
         env,
         system,
         user: body,
+        temperature: 0.2,
+        maxTokens: 2500,
       });
       return { markdown };
     }
@@ -66,8 +73,10 @@ export class AiService {
       const markdown = await this.llm.complete({
         provider: dto.provider,
         env,
-        system: `Translate the note into ${LANG[lang]}. Keep Markdown structure. Do not add new facts.`,
+        system: `Translate the note into ${LANG[lang]}. Keep structure. Do not add new facts.`,
         user: body,
+        temperature: 0,
+        maxTokens: 2500,
       });
       return { markdown };
     }
@@ -75,14 +84,31 @@ export class AiService {
     const lang = this.requireLang(dto.targetLang);
     const count = Math.min(8, Math.max(1, dto.count ?? 5));
     const difficulty = dto.difficulty ?? 'medium';
+    const existing = await this.questions.listByNote(noteId);
+    const stems = existing
+      .map((row) => row.prompt.trim())
+      .filter(Boolean)
+      .slice(0, STEM_LIMIT);
+    const topics = topicNamesOf(note);
+    const user = [
+      body,
+      topics.length ? `Topics: ${topics.join(', ')}` : '',
+      stems.length ? `Existing questions:\n${stems.map((stem) => `- ${stem}`).join('\n')}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+
     const raw = await this.llm.complete({
       provider: dto.provider,
       env,
-      system: `Return ONLY a JSON array of multiple-choice items. Exactly ${count} items. Difficulty: ${difficulty}. Write prompt, choices, and explanationMarkdown in ${LANG[lang]}. Each item: prompt, choiceA, choiceB, choiceC, choiceD, correctChoice (A|B|C|D), explanationMarkdown (required: 1-3 sentences explaining why the correct choice is right). Exactly one correctChoice.`,
-      user: body,
+      json: true,
+      temperature: 0.4,
+      maxTokens: 2000,
+      system: `You are an interview coach. Use only the note. Return JSON {"items":[...]}. Exactly ${count} items. Language: ${LANG[lang]}. Difficulty: ${difficulty} (easy=recall, medium=apply, hard=trade-off or debug). Each item: prompt, choiceA, choiceB, choiceC, choiceD, correctChoice (A|B|C|D), explanationMarkdown (1-3 sentences). Exactly one correctChoice. Plausible distractors. Do not invent APIs or RFCs. Do not repeat existing question stems.`,
+      user,
     });
 
-    const list = parseJsonArray(raw);
+    const list = parseLlmJsonArray(raw);
     const valid = list
       .filter((item): item is CreateQuestionBody => isValidMcq(item as never))
       .slice(0, count);

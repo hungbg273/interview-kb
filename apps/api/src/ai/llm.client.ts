@@ -26,6 +26,9 @@ export class LlmClient {
     env: ProviderEnv;
     system: string;
     user: string;
+    json?: boolean;
+    maxTokens?: number;
+    temperature?: number;
   }): Promise<string> {
     const cfg = providerConfig(opts.provider, opts.env);
     if (!cfg.apiKey) {
@@ -48,7 +51,9 @@ export class LlmClient {
             { role: 'system', content: opts.system },
             { role: 'user', content: opts.user },
           ],
-          temperature: 0.3,
+          temperature: opts.temperature ?? 0.3,
+          ...(opts.maxTokens ? { max_tokens: opts.maxTokens } : {}),
+          ...(opts.json ? { response_format: { type: 'json_object' } } : {}),
         }),
         signal: ctrl.signal,
       });

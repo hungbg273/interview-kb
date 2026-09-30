@@ -95,4 +95,31 @@ describe('LlmClient', () => {
     await jest.advanceTimersByTimeAsync(30_000);
     await expectation;
   });
+
+  it('sends json_object, max_tokens, and temperature when asked', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: '{"items":[]}' } }] }),
+    }) as never;
+
+    await client.complete({
+      provider: 'openai',
+      env: { OPENAI_API_KEY: 'sk' },
+      system: 's',
+      user: 'u',
+      json: true,
+      maxTokens: 800,
+      temperature: 0,
+    });
+
+    const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body as string) as {
+      response_format?: { type: string };
+      max_tokens?: number;
+      temperature?: number;
+    };
+    expect(body.response_format).toEqual({ type: 'json_object' });
+    expect(body.max_tokens).toBe(800);
+    expect(body.temperature).toBe(0);
+  });
 });
+

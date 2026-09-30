@@ -64,14 +64,14 @@ describe('AiService', () => {
     const notes = { findById: jest.fn().mockResolvedValue(note) };
     const questions = {
       save: jest.fn().mockImplementation((row) => Promise.resolve(row)),
+      listByNote: jest.fn().mockResolvedValue([]),
       listRecentAiByNote: jest.fn().mockResolvedValue([]),
     };
     const llm = {
       complete: jest.fn().mockResolvedValue(
-        JSON.stringify([
-          validMcq('Q1'),
-          { prompt: 'bad', correctChoice: 'Z' },
-        ]),
+        JSON.stringify({
+          items: [validMcq('Q1'), { prompt: 'bad', correctChoice: 'Z' }],
+        }),
       ),
     };
     const svc = new AiService(notes as never, questions as never, llm as never);
@@ -87,11 +87,14 @@ describe('AiService', () => {
     const notes = { findById: jest.fn().mockResolvedValue(note) };
     const questions = {
       save: jest.fn().mockImplementation((row) => Promise.resolve(row)),
+      listByNote: jest.fn().mockResolvedValue([]),
       listRecentAiByNote: jest.fn().mockResolvedValue([]),
     };
     const llm = {
       complete: jest.fn().mockResolvedValue(
-        JSON.stringify(Array.from({ length: 9 }, (_, i) => validMcq(`Q${i + 1}`))),
+        JSON.stringify({
+          items: Array.from({ length: 9 }, (_, i) => validMcq(`Q${i + 1}`)),
+        }),
       ),
     };
     const svc = new AiService(notes as never, questions as never, llm as never);
@@ -104,11 +107,14 @@ describe('AiService', () => {
     const notes = { findById: jest.fn().mockResolvedValue(note) };
     const questions = {
       save: jest.fn().mockImplementation((row) => Promise.resolve(row)),
+      listByNote: jest.fn().mockResolvedValue([]),
       listRecentAiByNote: jest.fn().mockResolvedValue([]),
     };
     const llm = {
       complete: jest.fn().mockResolvedValue(
-        JSON.stringify(Array.from({ length: 6 }, (_, i) => validMcq(`Q${i + 1}`))),
+        JSON.stringify({
+          items: Array.from({ length: 6 }, (_, i) => validMcq(`Q${i + 1}`)),
+        }),
       ),
     };
     const svc = new AiService(notes as never, questions as never, llm as never);
@@ -131,10 +137,11 @@ describe('AiService', () => {
     const notes = { findById: jest.fn().mockResolvedValue(note) };
     const questions = {
       save: jest.fn().mockImplementation((row) => Promise.resolve(row)),
+      listByNote: jest.fn().mockResolvedValue([]),
       listRecentAiByNote: jest.fn().mockResolvedValue([]),
     };
     const llm = {
-      complete: jest.fn().mockResolvedValue(JSON.stringify([validMcq('Q1')])),
+      complete: jest.fn().mockResolvedValue(JSON.stringify({ items: [validMcq('Q1')] })),
     };
     const svc = new AiService(notes as never, questions as never, llm as never);
     await svc.run('n1', {
@@ -157,6 +164,38 @@ describe('AiService', () => {
     expect(questions.save).toHaveBeenCalledWith(
       expect.objectContaining({ lang: 'vi' }),
     );
+  });
+
+  it('clips long notes and sends topics plus existing stems', async () => {
+    process.env.OPENAI_API_KEY = 'sk';
+    const notes = {
+      findById: jest.fn().mockResolvedValue({
+        ...note,
+        bodyMarkdown: 'x'.repeat(5000),
+        noteTopics: [{ topic: { name: 'Networking' } }],
+      }),
+    };
+    const questions = {
+      listByNote: jest.fn().mockResolvedValue([{ prompt: 'What is SYN?' }]),
+      save: jest.fn().mockImplementation((row) => Promise.resolve(row)),
+      listRecentAiByNote: jest.fn().mockResolvedValue([]),
+    };
+    const llm = {
+      complete: jest.fn().mockResolvedValue(JSON.stringify({ items: [validMcq('Q1')] })),
+    };
+    const svc = new AiService(notes as never, questions as never, llm as never);
+    await svc.run('n1', { action: 'generate-questions', provider: 'openai', count: 1, targetLang: 'en' });
+
+    expect(llm.complete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        json: true,
+        user: expect.stringMatching(/\[đã cắt\]/),
+      }),
+    );
+    const user = (llm.complete as jest.Mock).mock.calls[0][0].user as string;
+    expect(user).toContain('Networking');
+    expect(user).toContain('What is SYN?');
+    expect(user).not.toContain('x'.repeat(5000));
   });
 
   it('generate-content returns markdown without saving the note', async () => {

@@ -28,6 +28,15 @@ export class TopicsRepository extends BaseRepository<Topic> {
       .getMany();
   }
 
+  async listNames(take = 40) {
+    const rows = await this.repo.find({
+      select: ['name'],
+      order: { name: 'ASC' },
+      take,
+    });
+    return rows.map((row) => row.name);
+  }
+
   searchByName(q: string) {
     return this.repo
       .createQueryBuilder('topic')
