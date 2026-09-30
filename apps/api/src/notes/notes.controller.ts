@@ -14,7 +14,7 @@ import { ApiCookieAuth, ApiTags } from '@nestjs/swagger';
 import {
   CreateNoteDto,
   ListNotesQuery,
-  ReplaceTagsDto,
+  ReplaceTopicsDto,
   UpdateNoteDto,
 } from './dto';
 import { NotesService } from './notes.service';
@@ -51,8 +51,8 @@ export class NotesController {
     return this.notes.remove(id);
   }
 
-  @Put(':id/tags')
-  replaceTags(@Param('id') id: string, @Body() dto: ReplaceTagsDto) {
-    return this.notes.replaceTags(id, dto.tagIds);
+  @Put(':id/topics')
+  replaceTopics(@Param('id') id: string, @Body() dto: ReplaceTopicsDto) {
+    return this.notes.replaceTopics(id, dto.topicIds);
   }
 }

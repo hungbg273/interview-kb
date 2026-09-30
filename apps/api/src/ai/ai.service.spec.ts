@@ -75,10 +75,10 @@ describe('AiService', () => {
       ),
     };
     const svc = new AiService(notes as never, questions as never, llm as never);
-    await svc.run('n1', { action: 'generate-questions', provider: 'openai' });
+    await svc.run('n1', { action: 'generate-questions', provider: 'openai', targetLang: 'en' });
     expect(questions.save).toHaveBeenCalledTimes(1);
     expect(questions.save).toHaveBeenCalledWith(
-      expect.objectContaining({ prompt: 'Q1', source: 'ai', correctChoice: 'A' }),
+      expect.objectContaining({ prompt: 'Q1', source: 'ai', correctChoice: 'A', lang: 'en' }),
     );
   });
 
@@ -95,8 +95,102 @@ describe('AiService', () => {
       ),
     };
     const svc = new AiService(notes as never, questions as never, llm as never);
-    await svc.run('n1', { action: 'generate-questions', provider: 'openai' });
+    await svc.run('n1', { action: 'generate-questions', provider: 'openai', count: 8, targetLang: 'en' });
     expect(questions.save).toHaveBeenCalledTimes(8);
+  });
+
+  it('generate-questions uses the requested count', async () => {
+    process.env.OPENAI_API_KEY = 'sk';
+    const notes = { findById: jest.fn().mockResolvedValue(note) };
+    const questions = {
+      save: jest.fn().mockImplementation((row) => Promise.resolve(row)),
+      listRecentAiByNote: jest.fn().mockResolvedValue([]),
+    };
+    const llm = {
+      complete: jest.fn().mockResolvedValue(
+        JSON.stringify(Array.from({ length: 6 }, (_, i) => validMcq(`Q${i + 1}`))),
+      ),
+    };
+    const svc = new AiService(notes as never, questions as never, llm as never);
+    await svc.run('n1', {
+      action: 'generate-questions',
+      provider: 'openai',
+      count: 3,
+      targetLang: 'en',
+    });
+    expect(questions.save).toHaveBeenCalledTimes(3);
+    expect(llm.complete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        system: expect.stringContaining('Exactly 3'),
+      }),
+    );
+  });
+
+  it('generate-questions uses the requested difficulty', async () => {
+    process.env.OPENAI_API_KEY = 'sk';
+    const notes = { findById: jest.fn().mockResolvedValue(note) };
+    const questions = {
+      save: jest.fn().mockImplementation((row) => Promise.resolve(row)),
+      listRecentAiByNote: jest.fn().mockResolvedValue([]),
+    };
+    const llm = {
+      complete: jest.fn().mockResolvedValue(JSON.stringify([validMcq('Q1')])),
+    };
+    const svc = new AiService(notes as never, questions as never, llm as never);
+    await svc.run('n1', {
+      action: 'generate-questions',
+      provider: 'openai',
+      count: 1,
+      difficulty: 'hard',
+      targetLang: 'vi',
+    });
+    expect(llm.complete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        system: expect.stringContaining('hard'),
+      }),
+    );
+    expect(llm.complete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        system: expect.stringContaining('Vietnamese'),
+      }),
+    );
+    expect(questions.save).toHaveBeenCalledWith(
+      expect.objectContaining({ lang: 'vi' }),
+    );
+  });
+
+  it('generate-content returns markdown without saving the note', async () => {
+    process.env.OPENAI_API_KEY = 'sk';
+    const notes = {
+      findById: jest.fn().mockResolvedValue(note),
+      save: jest.fn(),
+    };
+    const llm = { complete: jest.fn().mockResolvedValue('# Draft') };
+    const svc = new AiService(notes as never, { save: jest.fn() } as never, llm as never);
+    const result = await svc.run('n1', { action: 'generate-content', provider: 'openai' });
+    expect(result).toEqual({ markdown: '# Draft' });
+    expect(notes.save).not.toHaveBeenCalled();
+  });
+
+  it('translate-note returns translated markdown', async () => {
+    process.env.OPENAI_API_KEY = 'sk';
+    const notes = {
+      findById: jest.fn().mockResolvedValue(note),
+      save: jest.fn(),
+    };
+    const llm = { complete: jest.fn().mockResolvedValue('TCP is reliable') };
+    const svc = new AiService(notes as never, { save: jest.fn() } as never, llm as never);
+    const result = await svc.run('n1', {
+      action: 'translate-note',
+      provider: 'openai',
+      targetLang: 'en',
+    });
+    expect(result).toEqual({ markdown: 'TCP is reliable' });
+    expect(llm.complete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        system: expect.stringContaining('English'),
+      }),
+    );
   });
 
   it('throws NOT_FOUND when the note is missing', async () => {

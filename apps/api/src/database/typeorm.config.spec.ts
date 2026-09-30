@@ -1,9 +1,9 @@
 import { DataSource } from 'typeorm';
 import { Note } from '../entities/note.entity';
-import { NoteTag } from '../entities/note-tag.entity';
+import { NoteTopic } from '../entities/note-topic.entity';
 import { Question } from '../entities/question.entity';
-import { Tag } from '../entities/tag.entity';
 import { Topic } from '../entities/topic.entity';
+import { TopicParent } from '../entities/topic-parent.entity';
 import { createDataSource, entities, typeormOptions } from './typeorm.config';
 
 describe('typeorm config', () => {
@@ -24,7 +24,7 @@ describe('typeorm config', () => {
     expect(options.synchronize).toBe(false);
     expect(options.type).toBe('postgres');
     expect(options.entities).toEqual(
-      expect.arrayContaining([Topic, Tag, Note, NoteTag, Question]),
+      expect.arrayContaining([Topic, TopicParent, Note, NoteTopic, Question]),
     );
     expect(entities).toHaveLength(5);
     expect(createDataSource()).toBeInstanceOf(DataSource);

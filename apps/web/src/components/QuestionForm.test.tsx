@@ -13,6 +13,7 @@ test('has A-D radios', () => {
         choiceD: '',
         correctChoice: 'A',
         explanationMarkdown: '',
+        lang: 'vi',
       }}
       onChange={() => {}}
       onSubmit={() => {}}

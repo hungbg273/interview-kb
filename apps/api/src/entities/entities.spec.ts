@@ -1,9 +1,9 @@
 import { getMetadataArgsStorage } from 'typeorm';
 import { Note } from './note.entity';
-import { NoteTag } from './note-tag.entity';
+import { NoteTopic } from './note-topic.entity';
 import { Question } from './question.entity';
-import { Tag } from './tag.entity';
 import { Topic } from './topic.entity';
+import { TopicParent } from './topic-parent.entity';
 
 function columnNames(target: Function) {
   return getMetadataArgsStorage()
@@ -31,52 +31,46 @@ function relationIdNames(target: Function) {
 }
 
 describe('TypeORM entities', () => {
-  it('Topic has tree parent and unique slug, no userId', () => {
+  it('Topic has unique slug and no single parent column', () => {
     const names = columnNames(Topic);
     expect(names).toEqual(
       expect.arrayContaining(['id', 'name', 'slug', 'createdAt']),
     );
     expect(names).not.toContain('userId');
     expect(names).not.toContain('parentId');
-    expect(relationIdNames(Topic)).toContain('parentId');
-    expect(joinColumnNames(Topic)).toContain('parent_id');
+    expect(relationIdNames(Topic)).not.toContain('parentId');
+    expect(joinColumnNames(Topic)).not.toContain('parent_id');
     const slug = getMetadataArgsStorage().columns.find(
       (c) => c.target === Topic && c.propertyName === 'slug',
     );
     expect(slug?.options.unique).toBe(true);
   });
 
-  it('Tag has unique name and slug', () => {
-    const names = columnNames(Tag);
-    expect(names).toEqual(
-      expect.arrayContaining(['id', 'name', 'slug', 'createdAt']),
+  it('TopicParent is a composite parent-child edge', () => {
+    const names = columnNames(TopicParent);
+    expect(names).toEqual(expect.arrayContaining(['parentId', 'childId']));
+    expect(joinColumnNames(TopicParent)).toEqual(
+      expect.arrayContaining(['parent_id', 'child_id']),
     );
-    expect(
-      getMetadataArgsStorage().columns.find(
-        (c) => c.target === Tag && c.propertyName === 'name',
-      )?.options.unique,
-    ).toBe(true);
   });
 
-  it('Note has title and bodyMarkdown and does not map searchVector', () => {
+  it('Note has title and bodyMarkdown and no topic_id column', () => {
     const names = columnNames(Note);
     expect(names).toEqual(
       expect.arrayContaining(['id', 'title', 'bodyMarkdown']),
     );
     expect(names).not.toContain('topicId');
     expect(names).not.toContain('searchVector');
-    expect(names).not.toContain('search_vector');
-    expect(relationIdNames(Note)).toContain('topicId');
-    expect(joinColumnNames(Note)).toContain('topic_id');
+    expect(joinColumnNames(Note)).not.toContain('topic_id');
     const check = getMetadataArgsStorage().checks.find((c) => c.target === Note);
     expect(check?.expression).toMatch(/char_length\(body_markdown\) <= 100000/);
   });
 
-  it('NoteTag is a composite join of note and tag', () => {
-    const names = columnNames(NoteTag);
-    expect(names).toEqual(expect.arrayContaining(['noteId', 'tagId']));
-    expect(joinColumnNames(NoteTag)).toEqual(
-      expect.arrayContaining(['note_id', 'tag_id']),
+  it('NoteTopic is a composite join of note and topic', () => {
+    const names = columnNames(NoteTopic);
+    expect(names).toEqual(expect.arrayContaining(['noteId', 'topicId']));
+    expect(joinColumnNames(NoteTopic)).toEqual(
+      expect.arrayContaining(['note_id', 'topic_id']),
     );
   });
 
@@ -91,10 +85,10 @@ describe('TypeORM entities', () => {
         'choiceD',
         'correctChoice',
         'explanationMarkdown',
+        'lang',
         'source',
       ]),
     );
-    expect(names).not.toContain('noteId');
     expect(relationIdNames(Question)).toContain('noteId');
     const correct = getMetadataArgsStorage().columns.find(
       (c) => c.target === Question && c.propertyName === 'correctChoice',
@@ -103,7 +97,11 @@ describe('TypeORM entities', () => {
       (c) => c.target === Question && c.propertyName === 'source',
     );
     expect(correct?.options.enumName).toBe('question_correct_choice');
+    const lang = getMetadataArgsStorage().columns.find(
+      (c) => c.target === Question && c.propertyName === 'lang',
+    );
     expect(source?.options.enumName).toBe('question_source');
+    expect(lang?.options.enumName).toBe('question_lang');
   });
 
   it('does not map the same FK column twice on Topic, Note, or Question', () => {
@@ -115,15 +113,15 @@ describe('TypeORM entities', () => {
     }
   });
 
-  it('deleting a note cascades questions and tag links', () => {
+  it('deleting a note cascades questions and topic links', () => {
     const relations = getMetadataArgsStorage().relations;
     const questionNote = relations.find(
       (r) => r.target === Question && r.propertyName === 'note',
     );
-    const noteTagNote = relations.find(
-      (r) => r.target === NoteTag && r.propertyName === 'note',
+    const noteTopicNote = relations.find(
+      (r) => r.target === NoteTopic && r.propertyName === 'note',
     );
     expect(questionNote?.options?.onDelete).toBe('CASCADE');
-    expect(noteTagNote?.options?.onDelete).toBe('CASCADE');
+    expect(noteTopicNote?.options?.onDelete).toBe('CASCADE');
   });
 });

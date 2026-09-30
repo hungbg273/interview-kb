@@ -1,7 +1,7 @@
 # Practice quiz — Design Spec
 
 Date: 2026-09-29  
-Status: draft (awaiting owner review)  
+Status: approved  
 Parent spec: `docs/superpowers/specs/2026-09-17-interview-knowledge-base-design.md`  
 Related: `docs/superpowers/specs/2026-09-29-subject-graph-design.md`
 

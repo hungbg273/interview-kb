@@ -31,6 +31,16 @@ describe('api', () => {
     );
   });
 
+  it('omits JSON content-type for FormData bodies', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { ok: true }));
+    vi.stubGlobal('fetch', fetchMock);
+    const body = new FormData();
+    body.append('source', 'cv');
+    await api('/practice/imports', { method: 'POST', body });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.headers).not.toEqual(expect.objectContaining({ 'Content-Type': 'application/json' }));
+  });
+
   it('throws ApiError from the API error body', async () => {
     vi.stubGlobal(
       'fetch',

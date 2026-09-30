@@ -1,5 +1,5 @@
 export { Note } from './note.entity';
-export { NoteTag } from './note-tag.entity';
+export { NoteTopic } from './note-topic.entity';
 export { Question } from './question.entity';
-export { Tag } from './tag.entity';
 export { Topic } from './topic.entity';
+export { TopicParent } from './topic-parent.entity';

@@ -1,4 +1,4 @@
-import { CorrectChoice, CreateQuestionBody } from '@kb/shared';
+import { AiLang, CorrectChoice, CreateQuestionBody } from '@kb/shared';
 
 const letters: CorrectChoice[] = ['A', 'B', 'C', 'D'];
 
@@ -41,6 +41,16 @@ export function QuestionForm(props: {
           />
         </div>
       ))}
+      <label>
+        Ngôn ngữ
+        <select
+          value={v.lang ?? 'vi'}
+          onChange={(e) => set('lang', e.target.value as AiLang)}
+        >
+          <option value="vi">Tiếng Việt</option>
+          <option value="en">English</option>
+        </select>
+      </label>
       <textarea
         placeholder="Giải thích (tuỳ chọn)"
         value={v.explanationMarkdown ?? ''}

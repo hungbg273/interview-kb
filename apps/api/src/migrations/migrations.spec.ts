@@ -1,6 +1,8 @@
 import { InitSchema1760000000001 } from './1760000000001-InitSchema';
 import { NoteFts1760000000002 } from './1760000000002-NoteFts';
 import { NoteBodyLength1760000000003 } from './1760000000003-NoteBodyLength';
+import { SubjectGraph1760000000004 } from './1760000000004-SubjectGraph';
+import { QuestionLang1760000000005 } from './1760000000005-QuestionLang';
 
 function collectSql(fn: (runner: { query: (sql: string) => Promise<void> }) => Promise<void>) {
   const statements: string[] = [];
@@ -42,5 +44,24 @@ describe('schema migrations', () => {
     );
     expect(sql).toMatch(/note_body_markdown_length/);
     expect(sql).toMatch(/char_length\(body_markdown\) <= 100000/);
+  });
+
+  it('moves parent and note links onto join tables and drops tags', async () => {
+    const sql = await collectSql((runner) =>
+      new SubjectGraph1760000000004().up(runner as never),
+    );
+    expect(sql).toMatch(/CREATE TABLE "topic_parent"/);
+    expect(sql).toMatch(/CREATE TABLE "note_topic"/);
+    expect(sql).toMatch(/DROP TABLE "tag"/);
+    expect(sql).toMatch(/DROP COLUMN "parent_id"/);
+    expect(sql).toMatch(/DROP COLUMN "topic_id"/);
+  });
+
+  it('adds question lang enum', async () => {
+    const sql = await collectSql((runner) =>
+      new QuestionLang1760000000005().up(runner as never),
+    );
+    expect(sql).toMatch(/CREATE TYPE "question_lang"/);
+    expect(sql).toMatch(/ADD COLUMN "lang"/);
   });
 });

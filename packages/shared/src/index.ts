@@ -1,7 +1,14 @@
 export type CorrectChoice = 'A' | 'B' | 'C' | 'D';
 export type QuestionSource = 'manual' | 'ai';
 export type AiProvider = 'openai' | 'deepseek';
-export type AiAction = 'summarize' | 'expand' | 'generate-questions';
+export type AiAction =
+  | 'summarize'
+  | 'expand'
+  | 'generate-questions'
+  | 'generate-content'
+  | 'translate-note';
+export type AiLang = 'en' | 'vi';
+export type AiDifficulty = 'easy' | 'medium' | 'hard';
 
 export const ERROR_CODES = {
   UNAUTHENTICATED: 'UNAUTHENTICATED',
@@ -9,6 +16,7 @@ export const ERROR_CODES = {
   VALIDATION: 'VALIDATION',
   NOT_FOUND: 'NOT_FOUND',
   CONFLICT: 'CONFLICT',
+  CYCLE: 'CYCLE',
   AI_UPSTREAM: 'AI_UPSTREAM',
   AI_TIMEOUT: 'AI_TIMEOUT',
   AI_NOT_CONFIGURED: 'AI_NOT_CONFIGURED',
@@ -48,6 +56,7 @@ export type CreateQuestionBody = {
   choiceD: string;
   correctChoice: CorrectChoice;
   explanationMarkdown?: string | null;
+  lang?: AiLang;
 };
 
 export function isValidMcq(input: {

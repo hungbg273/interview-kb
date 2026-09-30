@@ -9,11 +9,31 @@ export class TopicsRepository extends BaseRepository<Topic> {
     super(Topic, dataSource);
   }
 
-  list() {
-    return this.repo.find({ order: { name: 'ASC' } });
+  listRoots() {
+    return this.repo
+      .createQueryBuilder('topic')
+      .where(
+        `NOT EXISTS (SELECT 1 FROM topic_parent tp WHERE tp.child_id = topic.id)`,
+      )
+      .orderBy('topic.name', 'ASC')
+      .getMany();
   }
 
-  countChildren(parentId: string) {
-    return this.repo.count({ where: { parent: { id: parentId } } });
+  listChildren(parentId: string) {
+    return this.repo
+      .createQueryBuilder('topic')
+      .innerJoin('topic_parent', 'tp', 'tp.child_id = topic.id')
+      .where('tp.parent_id = :parentId', { parentId })
+      .orderBy('topic.name', 'ASC')
+      .getMany();
+  }
+
+  searchByName(q: string) {
+    return this.repo
+      .createQueryBuilder('topic')
+      .where('LOWER(topic.name) LIKE LOWER(:q)', { q: `%${q}%` })
+      .orderBy('topic.name', 'ASC')
+      .take(50)
+      .getMany();
   }
 }

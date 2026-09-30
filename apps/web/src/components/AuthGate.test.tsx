@@ -5,6 +5,7 @@ const { replace } = vi.hoisted(() => ({ replace: vi.fn() }));
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace }),
+  usePathname: () => '/',
 }));
 
 import { AuthGate } from './AuthGate';
@@ -61,7 +62,8 @@ describe('AuthGate', () => {
     expect(await screen.findByText('you@example.com')).toBeInTheDocument();
     expect(screen.getByText('Danh sách sẽ có ở bước 11.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Ghi chú' })).toHaveAttribute('href', '/');
-    expect(screen.getByRole('link', { name: 'Chủ đề' })).toHaveAttribute('href', '/topics');
+    expect(screen.getByRole('link', { name: 'Luyện tập' })).toHaveAttribute('href', '/practice');
+    expect(screen.queryByRole('link', { name: 'Chủ đề' })).not.toBeInTheDocument();
   });
 
   it('logs out then returns to login', async () => {

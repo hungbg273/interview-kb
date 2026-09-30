@@ -21,6 +21,10 @@ export class AppError extends HttpException {
     return new AppError(ERROR_CODES.CONFLICT, message, HttpStatus.CONFLICT);
   }
 
+  static cycle(message = 'Parent edge would create a cycle') {
+    return new AppError(ERROR_CODES.CYCLE, message, HttpStatus.CONFLICT);
+  }
+
   static unauthenticated(message = 'Unauthenticated') {
     return new AppError(
       ERROR_CODES.UNAUTHENTICATED,

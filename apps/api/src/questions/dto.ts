@@ -1,5 +1,5 @@
-import type { CorrectChoice } from '@kb/shared';
-import { IsEnum, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import type { AiLang, CorrectChoice } from '@kb/shared';
+import { IsEnum, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class CreateQuestionDto {
   @IsString()
@@ -32,6 +32,9 @@ export class CreateQuestionDto {
   @IsOptional()
   @IsString()
   explanationMarkdown?: string;
+
+  @IsIn(['en', 'vi'])
+  lang!: AiLang;
 }
 
 export class UpdateQuestionDto {
@@ -71,4 +74,8 @@ export class UpdateQuestionDto {
   @IsOptional()
   @IsString()
   explanationMarkdown?: string | null;
+
+  @IsOptional()
+  @IsIn(['en', 'vi'])
+  lang?: AiLang;
 }

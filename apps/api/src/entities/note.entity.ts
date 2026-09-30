@@ -3,16 +3,12 @@ import {
   Column,
   CreateDateColumn,
   Entity,
-  JoinColumn,
-  ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
-  RelationId,
   UpdateDateColumn,
 } from 'typeorm';
-import { NoteTag } from './note-tag.entity';
+import { NoteTopic } from './note-topic.entity';
 import { Question } from './question.entity';
-import { Topic } from './topic.entity';
 
 @Check('note_body_markdown_length', 'char_length(body_markdown) <= 100000')
 @Entity({ name: 'note' })
@@ -26,15 +22,8 @@ export class Note {
   @Column({ type: 'text', name: 'body_markdown' })
   bodyMarkdown: string;
 
-  @ManyToOne(() => Topic, (topic) => topic.notes, { nullable: true })
-  @JoinColumn({ name: 'topic_id' })
-  topic: Topic | null;
-
-  @RelationId((note: Note) => note.topic)
-  topicId: string | null;
-
-  @OneToMany(() => NoteTag, (noteTag) => noteTag.note)
-  noteTags: NoteTag[];
+  @OneToMany(() => NoteTopic, (noteTopic) => noteTopic.note)
+  noteTopics: NoteTopic[];
 
   @OneToMany(() => Question, (question) => question.note)
   questions: Question[];

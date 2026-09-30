@@ -3,10 +3,10 @@ import '../load-env';
 import { Global, Inject, Injectable, Module, OnModuleDestroy } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { createDataSource } from './typeorm.config';
-import { NoteTagsRepository } from './note-tags.repository';
+import { NoteTopicsRepository } from './note-topics.repository';
 import { NotesRepository } from './notes.repository';
 import { QuestionsRepository } from './questions.repository';
-import { TagsRepository } from './tags.repository';
+import { TopicParentsRepository } from './topic-parents.repository';
 import { TopicsRepository } from './topics.repository';
 
 @Injectable()
@@ -33,17 +33,17 @@ class DataSourceLifecycle implements OnModuleDestroy {
     },
     DataSourceLifecycle,
     TopicsRepository,
-    TagsRepository,
+    TopicParentsRepository,
     NotesRepository,
-    NoteTagsRepository,
+    NoteTopicsRepository,
     QuestionsRepository,
   ],
   exports: [
     DataSource,
     TopicsRepository,
-    TagsRepository,
+    TopicParentsRepository,
     NotesRepository,
-    NoteTagsRepository,
+    NoteTopicsRepository,
     QuestionsRepository,
   ],
 })

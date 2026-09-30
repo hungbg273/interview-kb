@@ -1,6 +1,7 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
+  IsBoolean,
   IsInt,
   IsOptional,
   IsString,
@@ -22,8 +23,9 @@ export class CreateNoteDto {
   bodyMarkdown!: string;
 
   @IsOptional()
-  @IsUUID()
-  topicId?: string;
+  @IsArray()
+  @IsUUID('4', { each: true })
+  topicIds?: string[];
 }
 
 export class UpdateNoteDto {
@@ -39,8 +41,9 @@ export class UpdateNoteDto {
   bodyMarkdown?: string;
 
   @IsOptional()
-  @IsUUID()
-  topicId?: string | null;
+  @IsArray()
+  @IsUUID('4', { each: true })
+  topicIds?: string[];
 }
 
 export class ListNotesQuery {
@@ -49,8 +52,9 @@ export class ListNotesQuery {
   topicId?: string;
 
   @IsOptional()
-  @IsUUID()
-  tagId?: string;
+  @Transform(({ value }) => value === true || value === 'true' || value === '1')
+  @IsBoolean()
+  uncategorized?: boolean;
 
   @IsOptional()
   @IsString()
@@ -70,8 +74,8 @@ export class ListNotesQuery {
   pageSize?: number = 20;
 }
 
-export class ReplaceTagsDto {
+export class ReplaceTopicsDto {
   @IsArray()
   @IsUUID('4', { each: true })
-  tagIds!: string[];
+  topicIds!: string[];
 }

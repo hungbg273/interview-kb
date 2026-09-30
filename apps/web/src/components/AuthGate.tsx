@@ -2,11 +2,12 @@
 
 import { getMe } from '@/lib/auth';
 import { api } from '@/lib/api';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const path = usePathname();
   const [email, setEmail] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
 
@@ -34,8 +35,12 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   return (
     <>
       <header className="topbar">
-        <a href="/">Ghi chú</a>
-        <a href="/topics">Chủ đề</a>
+        <a href="/" className={`brand${path === '/' ? ' active' : ''}`}>
+          Ghi chú
+        </a>
+        <a href="/practice" className={path.startsWith('/practice') ? 'active' : undefined}>
+          Luyện tập
+        </a>
         <span className="who">{email}</span>
         <button type="button" onClick={logout}>
           Đăng xuất

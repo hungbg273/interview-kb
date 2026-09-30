@@ -51,6 +51,13 @@ export class Question {
 
   @Column({
     type: 'enum',
+    enum: ['en', 'vi'],
+    enumName: 'question_lang',
+  })
+  lang: 'en' | 'vi';
+
+  @Column({
+    type: 'enum',
     enum: ['manual', 'ai'],
     enumName: 'question_source',
   })

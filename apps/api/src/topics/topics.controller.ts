@@ -7,9 +7,10 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { ApiCookieAuth, ApiTags } from '@nestjs/swagger';
-import { CreateTopicDto, UpdateTopicDto } from './dto';
+import { AddParentDto, CreateTopicDto, ListTopicsQuery, UpdateTopicDto } from './dto';
 import { TopicsService } from './topics.service';
 
 @ApiTags('topics')
@@ -19,8 +20,8 @@ export class TopicsController {
   constructor(private readonly topics: TopicsService) {}
 
   @Get()
-  list() {
-    return this.topics.list();
+  list(@Query() query: ListTopicsQuery) {
+    return this.topics.list(query.parentId);
   }
 
   @Get(':id')
@@ -36,6 +37,17 @@ export class TopicsController {
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateTopicDto) {
     return this.topics.update(id, dto);
+  }
+
+  @Post(':id/parents')
+  addParent(@Param('id') id: string, @Body() dto: AddParentDto) {
+    return this.topics.addParent(id, dto.parentId);
+  }
+
+  @Delete(':id/parents/:parentId')
+  @HttpCode(204)
+  removeParent(@Param('id') id: string, @Param('parentId') parentId: string) {
+    return this.topics.removeParent(id, parentId);
   }
 
   @Delete(':id')

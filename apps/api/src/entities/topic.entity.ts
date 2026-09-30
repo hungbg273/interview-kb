@@ -2,13 +2,10 @@ import {
   Column,
   CreateDateColumn,
   Entity,
-  JoinColumn,
-  ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
-  RelationId,
 } from 'typeorm';
-import { Note } from './note.entity';
+import { NoteTopic } from './note-topic.entity';
 
 @Entity({ name: 'topic' })
 export class Topic {
@@ -21,18 +18,8 @@ export class Topic {
   @Column({ type: 'varchar', unique: true })
   slug: string;
 
-  @ManyToOne(() => Topic, (topic) => topic.children, { nullable: true })
-  @JoinColumn({ name: 'parent_id' })
-  parent: Topic | null;
-
-  @RelationId((topic: Topic) => topic.parent)
-  parentId: string | null;
-
-  @OneToMany(() => Topic, (topic) => topic.parent)
-  children: Topic[];
-
-  @OneToMany(() => Note, (note) => note.topic)
-  notes: Note[];
+  @OneToMany(() => NoteTopic, (noteTopic) => noteTopic.topic)
+  noteTopics: NoteTopic[];
 
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   createdAt: Date;

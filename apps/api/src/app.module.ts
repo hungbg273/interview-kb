@@ -4,8 +4,9 @@ import { AuthModule } from './auth/auth.module';
 import { DatabaseModule } from './database/database.module';
 import { HealthController } from './health/health.controller';
 import { NotesModule } from './notes/notes.module';
+import { PracticeModule } from './practice/practice.module';
 import { QuestionsModule } from './questions/questions.module';
-import { TagsModule } from './tags/tags.module';
+import { SearchModule } from './search/search.module';
 import { TopicsModule } from './topics/topics.module';
 
 @Module({
@@ -13,10 +14,11 @@ import { TopicsModule } from './topics/topics.module';
     DatabaseModule,
     AuthModule,
     TopicsModule,
-    TagsModule,
     NotesModule,
     QuestionsModule,
+    PracticeModule,
     AiModule,
+    SearchModule,
   ],
   controllers: [HealthController],
 })

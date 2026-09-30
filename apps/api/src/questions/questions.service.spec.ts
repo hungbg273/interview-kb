@@ -15,6 +15,7 @@ describe('QuestionsService.create', () => {
         choiceC: 'c',
         choiceD: 'd',
         correctChoice: 'E' as never,
+        lang: 'en',
       }),
     ).rejects.toBeInstanceOf(AppError);
   });
@@ -32,6 +33,7 @@ describe('QuestionsService.create', () => {
         choiceC: 'c',
         choiceD: 'd',
         correctChoice: 'A',
+        lang: 'en',
       }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     expect(questions.save).not.toHaveBeenCalled();

@@ -1,34 +1,59 @@
 import { AppError } from '../common/app-error';
 import { TopicsService } from './topics.service';
 
-describe('TopicsService.remove', () => {
-  it('conflicts when topic has children', async () => {
-    const topics = {
-      findById: jest.fn().mockResolvedValue({ id: 't1' }),
-      countChildren: jest.fn().mockResolvedValue(1),
-      deleteById: jest.fn(),
-    };
-    const notes = { countByTopic: jest.fn() };
-    const svc = new TopicsService(topics as never, notes as never);
-    await expect(svc.remove('t1')).rejects.toBeInstanceOf(AppError);
-    expect(topics.deleteById).not.toHaveBeenCalled();
-  });
+function svc(partial: {
+  topics?: object;
+  parents?: object;
+}) {
+  return new TopicsService(
+    (partial.topics ?? {}) as never,
+    (partial.parents ?? {}) as never,
+  );
+}
 
-  it('conflicts when topic still has notes', async () => {
-    const topics = {
-      findById: jest.fn().mockResolvedValue({ id: 't1' }),
-      countChildren: jest.fn().mockResolvedValue(0),
-      deleteById: jest.fn(),
-    };
-    const notes = { countByTopic: jest.fn().mockResolvedValue(2) };
-    const svc = new TopicsService(topics as never, notes as never);
-    await expect(svc.remove('t1')).rejects.toBeInstanceOf(AppError);
-    expect(topics.deleteById).not.toHaveBeenCalled();
-  });
-
+describe('TopicsService', () => {
   it('404 when topic is missing', async () => {
     const topics = { findById: jest.fn().mockResolvedValue(null) };
-    const svc = new TopicsService(topics as never, {} as never);
-    await expect(svc.get('missing')).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(svc({ topics }).get('missing')).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+  });
+
+  it('deletes a topic even when it has children and notes', async () => {
+    const topics = {
+      findById: jest.fn().mockResolvedValue({ id: 't1' }),
+      deleteById: jest.fn().mockResolvedValue(undefined),
+    };
+    await svc({ topics }).remove('t1');
+    expect(topics.deleteById).toHaveBeenCalledWith('t1');
+  });
+
+  it('addParent returns CYCLE when the edge would loop', async () => {
+    const topics = {
+      findById: jest.fn().mockImplementation(async (id: string) => ({ id })),
+    };
+    const parents = {
+      listEdges: jest.fn().mockResolvedValue([{ parentId: 'A', childId: 'B' }]),
+      exists: jest.fn().mockResolvedValue(false),
+      add: jest.fn(),
+    };
+    await expect(svc({ topics, parents }).addParent('A', 'B')).rejects.toMatchObject({
+      code: 'CYCLE',
+    });
+    expect(parents.add).not.toHaveBeenCalled();
+  });
+
+  it('addParent returns CONFLICT when the edge already exists', async () => {
+    const topics = {
+      findById: jest.fn().mockImplementation(async (id: string) => ({ id })),
+    };
+    const parents = {
+      listEdges: jest.fn().mockResolvedValue([]),
+      exists: jest.fn().mockResolvedValue(true),
+      add: jest.fn(),
+    };
+    await expect(svc({ topics, parents }).addParent('B', 'A')).rejects.toMatchObject({
+      code: 'CONFLICT',
+    });
   });
 });

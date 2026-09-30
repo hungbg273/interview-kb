@@ -1,23 +1,54 @@
 'use client';
 
 import { api, ApiError } from '@/lib/api';
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { AuthGate } from '@/components/AuthGate';
 import { NoteEditor } from '@/components/NoteEditor';
 
 type NoteLink = { id: string; title: string };
+type TopicChip = { id: string; name: string };
 
 export function NewNote() {
   const router = useRouter();
+  const params = useSearchParams();
+  const createdId = useRef<string | null>(null);
+  const presetTopicId = params.get('topicId');
   const [error, setError] = useState('');
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [notes, setNotes] = useState<NoteLink[]>([]);
+  const [topics, setTopics] = useState<TopicChip[]>([]);
+  const [topicQuery, setTopicQuery] = useState('');
+  const [topicHits, setTopicHits] = useState<TopicChip[]>([]);
 
   useEffect(() => {
     void api<{ items: NoteLink[] }>('/notes').then((data) => setNotes(data.items));
   }, []);
+
+  useEffect(() => {
+    if (!presetTopicId) return;
+    void api<{ id: string; name: string }>(`/topics/${presetTopicId}`).then((t) => {
+      setTopics([{ id: t.id, name: t.name }]);
+    });
+  }, [presetTopicId]);
+
+  useEffect(() => {
+    const q = topicQuery.trim();
+    if (!q) {
+      setTopicHits([]);
+      return;
+    }
+    let cancelled = false;
+    void api<{ topics: TopicChip[] }>(`/search?q=${encodeURIComponent(q)}`).then((data) => {
+      if (cancelled) return;
+      const chosen = new Set(topics.map((t) => t.id));
+      setTopicHits(data.topics.filter((t) => !chosen.has(t.id)));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [topicQuery, topics]);
 
   async function save() {
     setError('');
@@ -27,11 +58,14 @@ export function NewNote() {
         body: JSON.stringify({
           title,
           bodyMarkdown: body,
+          topicIds: topics.map((t) => t.id),
         }),
       });
-      router.replace(`/notes/${note.id}`);
+      createdId.current = note.id;
+      return true;
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Không lưu được');
+      return false;
     }
   }
 
@@ -54,7 +88,20 @@ export function NewNote() {
           onTitleChange={setTitle}
           onBodyChange={setBody}
           onSave={save}
+          onSavedAck={() => {
+            if (createdId.current) router.replace(`/notes/${createdId.current}`);
+          }}
           error={error}
+          topics={topics}
+          topicQuery={topicQuery}
+          topicHits={topicHits}
+          onTopicQueryChange={setTopicQuery}
+          onAddTopic={(t) => {
+            setTopics((prev) => [...prev, t]);
+            setTopicQuery('');
+            setTopicHits([]);
+          }}
+          onRemoveTopic={(tid) => setTopics((prev) => prev.filter((t) => t.id !== tid))}
         />
       </section>
       <aside className="quiz">
@@ -68,7 +115,9 @@ export function NewNote() {
 export default function NewNotePage() {
   return (
     <AuthGate>
-      <NewNote />
+      <Suspense fallback={<main className="empty">Đang tải…</main>}>
+        <NewNote />
+      </Suspense>
     </AuthGate>
   );
 }

@@ -27,6 +27,7 @@ export class QuestionsService {
     question.choiceD = dto.choiceD.trim();
     question.correctChoice = dto.correctChoice;
     question.explanationMarkdown = dto.explanationMarkdown ?? null;
+    question.lang = dto.lang;
     question.source = 'manual';
     return this.questions.save(question);
   }

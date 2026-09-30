@@ -5,13 +5,13 @@ import { BaseRepository } from './base.repository';
 
 export type ListNotesFilter = {
   topicId?: string;
-  tagId?: string;
+  uncategorized?: boolean;
   q?: string;
   page: number;
   pageSize: number;
 };
 
-const NOTE_RELATIONS = ['topic', 'noteTags', 'noteTags.tag', 'questions'];
+const NOTE_RELATIONS = ['noteTopics', 'noteTopics.topic', 'questions'];
 
 @Injectable()
 export class NotesRepository extends BaseRepository<Note> {
@@ -26,8 +26,14 @@ export class NotesRepository extends BaseRepository<Note> {
     });
   }
 
-  countByTopic(topicId: string) {
-    return this.repo.count({ where: { topic: { id: topicId } } });
+  searchByTitle(q: string) {
+    return this.repo
+      .createQueryBuilder('note')
+      .select(['note.id', 'note.title'])
+      .where('LOWER(note.title) LIKE LOWER(:q)', { q: `%${q}%` })
+      .orderBy('note.updatedAt', 'DESC')
+      .take(50)
+      .getMany();
   }
 
   async list(filter: ListNotesFilter) {
@@ -37,13 +43,11 @@ export class NotesRepository extends BaseRepository<Note> {
     if (q) {
       const ids = await this.searchIds(q, {
         topicId: filter.topicId,
-        tagId: filter.tagId,
+        uncategorized: filter.uncategorized,
         limit: filter.pageSize,
         offset: skip,
       });
-      if (ids.length === 0) {
-        return [];
-      }
+      if (ids.length === 0) return [];
       const items = await this.repo.find({
         where: { id: In(ids) },
         relations: NOTE_RELATIONS,
@@ -56,21 +60,22 @@ export class NotesRepository extends BaseRepository<Note> {
     const qb = this.repo
       .createQueryBuilder('note')
       .distinct(true)
-      .leftJoinAndSelect('note.topic', 'topic')
-      .leftJoinAndSelect('note.noteTags', 'noteTags')
-      .leftJoinAndSelect('noteTags.tag', 'tag')
+      .leftJoinAndSelect('note.noteTopics', 'noteTopics')
+      .leftJoinAndSelect('noteTopics.topic', 'topic')
       .leftJoinAndSelect('note.questions', 'questions')
       .orderBy('note.updatedAt', 'DESC')
       .skip(skip)
       .take(filter.pageSize);
 
     if (filter.topicId) {
-      qb.andWhere('note.topic_id = :topicId', { topicId: filter.topicId });
+      qb.innerJoin('note_topic', 'nt_filter', 'nt_filter.note_id = note.id').andWhere(
+        'nt_filter.topic_id = :topicId',
+        { topicId: filter.topicId },
+      );
     }
-    if (filter.tagId) {
-      qb.innerJoin('note_tag', 'nt_filter', 'nt_filter.note_id = note.id').andWhere(
-        'nt_filter.tag_id = :tagId',
-        { tagId: filter.tagId },
+    if (filter.uncategorized) {
+      qb.andWhere(
+        `NOT EXISTS (SELECT 1 FROM note_topic nt0 WHERE nt0.note_id = note.id)`,
       );
     }
 
@@ -79,18 +84,21 @@ export class NotesRepository extends BaseRepository<Note> {
 
   private async searchIds(
     q: string,
-    opts: { topicId?: string; tagId?: string; limit: number; offset: number },
+    opts: {
+      topicId?: string;
+      uncategorized?: boolean;
+      limit: number;
+      offset: number;
+    },
   ): Promise<string[]> {
     const params: unknown[] = [q];
-    let sql = `SELECT n.id FROM note n`;
-    if (opts.tagId) {
-      params.push(opts.tagId);
-      sql += ` INNER JOIN note_tag nt ON nt.note_id = n.id AND nt.tag_id = $${params.length}`;
-    }
-    sql += ` WHERE n.search_vector @@ plainto_tsquery('english', $1)`;
+    let sql = `SELECT n.id FROM note n WHERE n.search_vector @@ plainto_tsquery('english', $1)`;
     if (opts.topicId) {
       params.push(opts.topicId);
-      sql += ` AND n.topic_id = $${params.length}`;
+      sql += ` AND EXISTS (SELECT 1 FROM note_topic nt WHERE nt.note_id = n.id AND nt.topic_id = $${params.length})`;
+    }
+    if (opts.uncategorized) {
+      sql += ` AND NOT EXISTS (SELECT 1 FROM note_topic nt0 WHERE nt0.note_id = n.id)`;
     }
     params.push(opts.limit, opts.offset);
     sql += ` ORDER BY n.updated_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`;
