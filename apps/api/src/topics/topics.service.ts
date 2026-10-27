@@ -14,6 +14,10 @@ export class TopicsService {
     private readonly parents: TopicParentsRepository,
   ) {}
 
+  catalog() {
+    return this.topics.findMany({ order: { name: 'ASC' } });
+  }
+
   list(parentId?: string) {
     if (parentId) return this.topics.listChildren(parentId);
     return this.topics.listRoots();

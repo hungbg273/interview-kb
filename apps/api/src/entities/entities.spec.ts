@@ -31,19 +31,24 @@ function relationIdNames(target: Function) {
 }
 
 describe('TypeORM entities', () => {
-  it('Topic has unique slug and no single parent column', () => {
+  it('Topic has account ownership and no single parent column', () => {
     const names = columnNames(Topic);
     expect(names).toEqual(
       expect.arrayContaining(['id', 'name', 'slug', 'createdAt']),
     );
-    expect(names).not.toContain('userId');
+    expect(names).toContain('userId');
     expect(names).not.toContain('parentId');
     expect(relationIdNames(Topic)).not.toContain('parentId');
     expect(joinColumnNames(Topic)).not.toContain('parent_id');
     const slug = getMetadataArgsStorage().columns.find(
       (c) => c.target === Topic && c.propertyName === 'slug',
     );
-    expect(slug?.options.unique).toBe(true);
+    expect(slug?.options.unique).not.toBe(true);
+    expect(
+      getMetadataArgsStorage().indices.some(
+        (index) => index.target === Topic && index.unique,
+      ),
+    ).toBe(true);
   });
 
   it('TopicParent is a composite parent-child edge', () => {
@@ -62,7 +67,9 @@ describe('TypeORM entities', () => {
     expect(names).not.toContain('topicId');
     expect(names).not.toContain('searchVector');
     expect(joinColumnNames(Note)).not.toContain('topic_id');
-    const check = getMetadataArgsStorage().checks.find((c) => c.target === Note);
+    const check = getMetadataArgsStorage().checks.find(
+      (c) => c.target === Note,
+    );
     expect(check?.expression).toMatch(/char_length\(body_markdown\) <= 100000/);
   });
 

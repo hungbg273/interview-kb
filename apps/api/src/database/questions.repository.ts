@@ -1,3 +1,4 @@
+import { currentAccount } from '../accounts/account-context';
 import { Injectable } from '@nestjs/common';
 import type { AiLang } from '@kb/shared';
 import { DataSource } from 'typeorm';
@@ -7,19 +8,21 @@ import { BaseRepository } from './base.repository';
 @Injectable()
 export class QuestionsRepository extends BaseRepository<Question> {
   constructor(dataSource: DataSource) {
-    super(Question, dataSource);
+    super(Question, dataSource, true);
   }
 
   listByNote(noteId: string, lang?: AiLang) {
     return this.repo.find({
-      where: lang ? { note: { id: noteId }, lang } : { note: { id: noteId } },
+      where: this.ownedWhere(
+        lang ? { note: { id: noteId }, lang } : { note: { id: noteId } },
+      ),
       order: { createdAt: 'DESC' },
     });
   }
 
   listRecentAiByNote(noteId: string, take: number) {
     return this.repo.find({
-      where: { note: { id: noteId }, source: 'ai' },
+      where: this.ownedWhere({ note: { id: noteId }, source: 'ai' }),
       order: { createdAt: 'DESC' },
       take,
     });
@@ -31,6 +34,7 @@ export class QuestionsRepository extends BaseRepository<Question> {
       .innerJoin('q.note', 'note')
       .innerJoin('note_topic', 'nt', 'nt.note_id = note.id')
       .where('nt.topic_id = :topicId', { topicId });
+    qb.andWhere('q.user_id = :userId', { userId: currentAccount().id });
     if (lang) {
       qb.andWhere('q.lang = :lang', { lang });
     }
@@ -39,6 +43,10 @@ export class QuestionsRepository extends BaseRepository<Question> {
 
   listByIds(ids: string[]) {
     if (ids.length === 0) return Promise.resolve([]);
-    return this.repo.createQueryBuilder('q').where('q.id IN (:...ids)', { ids }).getMany();
+    return this.repo
+      .createQueryBuilder('q')
+      .where('q.id IN (:...ids)', { ids })
+      .andWhere('q.user_id=:userId', { userId: currentAccount().id })
+      .getMany();
   }
 }

@@ -28,13 +28,26 @@ export class ChatgptClient {
     system: string;
     user: string;
     json?: boolean;
+    model?: string;
+    expectedConnection?: string;
   }): Promise<string> {
     try {
       const credential = await this.connection.credential(opts.owner);
+      if (
+        opts.expectedConnection &&
+        opts.expectedConnection !==
+          (credential.connectionId ||
+            credential.clientId + ':' + credential.subject)
+      )
+        throw connectionError(
+          'Kết nối ChatGPT đã thay đổi. Vui lòng tạo yêu cầu mới.',
+        );
       const models = await this.connection.models(opts.owner!);
       const model =
-        models.find((item) => item.id === credential.model)?.id ||
-        models[0]?.id;
+        models.find((item) => item.id === (opts.model || credential.model))
+          ?.id || models[0]?.id;
+      if (opts.model && !models.some((item) => item.id === opts.model))
+        throw AppError.aiUpstream('Mô hình đã chọn không còn khả dụng.');
       if (!model)
         throw AppError.aiUpstream(
           'Tài khoản ChatGPT chưa có mô hình khả dụng.',

@@ -252,6 +252,7 @@ export class ChatgptConnection {
           throw connectionError();
         }
         await this.store.save(attempt.owner, {
+          connectionId: opaque(),
           clientId,
           subject: identity.subject,
           email: identity.email,
@@ -359,6 +360,15 @@ export class ChatgptConnection {
     }).finally(() => this.refreshing.delete(owner));
     this.refreshing.set(owner, refresh);
     return refresh;
+  }
+  async binding(owner: string) {
+    const saved = await this.store.read(owner);
+    if (!saved?.accessToken || this.disconnecting.has(owner))
+      throw connectionError('Chưa kết nối ChatGPT.');
+    return {
+      identity: saved.connectionId || saved.clientId + ':' + saved.subject,
+      model: saved.model,
+    };
   }
   async status(owner: string) {
     const saved = await this.store.read(owner);

@@ -119,3 +119,36 @@ test("announces progress and prevents duplicate actions while AI is running", ()
   fireEvent.click(screen.getByRole("button", { name: "Tóm tắt" }));
   expect(onRun).not.toHaveBeenCalled();
 });
+
+test("reveals the preview before AI controls and scrolls it into view", () => {
+  const scrollIntoView = vi.fn();
+  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+    configurable: true,
+    value: scrollIntoView,
+  });
+  render(
+    <AiPanel
+      provider="openai"
+      lastRun={{ action: "summarize" }}
+      questionCount={5}
+      questionLang="vi"
+      difficulty="medium"
+      onQuestionCountChange={() => {}}
+      onQuestionLangChange={() => {}}
+      onDifficultyChange={() => {}}
+      onProviderChange={() => {}}
+      preview="Nội dung kết quả"
+      error=""
+      onRun={() => {}}
+      onApply={() => {}}
+      onDiscard={() => {}}
+    />,
+  );
+  const preview = screen.getByRole("region", { name: "Kết quả AI" });
+  expect(preview.textContent).toContain("Nội dung kết quả");
+  expect(
+    preview.compareDocumentPosition(screen.getByLabelText("Nguồn AI")) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(scrollIntoView).toHaveBeenCalled();
+});

@@ -1,4 +1,5 @@
 'use client';
+import { AiJobsProvider } from './AiJobsProvider';
 
 import {usePathname} from 'next/navigation';
 import {AuthGate} from './AuthGate';
@@ -9,5 +10,5 @@ import {WorkspaceNavigationProvider} from './WorkspaceNavigation';
 export function AppWorkspace({children}:{children:React.ReactNode}) {
   const path=usePathname();
   if(path === '/login') return children;
-  return <WorkspaceNavigationProvider><AuthGate><NotesProvider>{children}</NotesProvider></AuthGate></WorkspaceNavigationProvider>;
+  return <WorkspaceNavigationProvider><AuthGate><NotesProvider><AiJobsProvider>{children}</AiJobsProvider></NotesProvider></AuthGate></WorkspaceNavigationProvider>;
 }

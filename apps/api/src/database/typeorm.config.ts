@@ -1,3 +1,6 @@
+import { PersonalLibraries1760000000008 } from '../migrations/1760000000008-PersonalLibraries';
+import { ImportJobs1760000000007 } from '../migrations/1760000000007-ImportJobs';
+import { AiJobs1760000000006 } from '../migrations/1760000000006-AiJobs';
 import 'reflect-metadata';
 import { DataSource, type DataSourceOptions } from 'typeorm';
 import { Note } from '../entities/note.entity';
@@ -19,6 +22,9 @@ export const migrations = [
   NoteBodyLength1760000000003,
   SubjectGraph1760000000004,
   QuestionLang1760000000005,
+  AiJobs1760000000006,
+  ImportJobs1760000000007,
+  PersonalLibraries1760000000008,
 ];
 
 export function typeormOptions(): DataSourceOptions {

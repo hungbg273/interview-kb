@@ -66,13 +66,13 @@ export class PracticeController {
   }
 
   @Patch('imports/:draftId')
-  keepImport(@Param('draftId') draftId: string, @Body() dto: KeepImportDto) {
-    return this.imports.keep(draftId, dto);
+  keepImport(@Param('draftId') draftId: string, @Body() dto: KeepImportDto,@Req() req:{user:{email:string}}) {
+    return this.imports.keep(draftId, dto,req.user.email);
   }
 
   @Post('imports/:draftId/grade')
   @HttpCode(200)
-  gradeImport(@Param('draftId') draftId: string, @Body() dto: ImportGradeDto) {
-    return this.imports.grade(draftId, dto);
+  gradeImport(@Param('draftId') draftId: string, @Body() dto: ImportGradeDto,@Req() req:{user:{email:string}}) {
+    return this.imports.grade(draftId, dto,req.user.email);
   }
 }

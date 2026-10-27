@@ -1,6 +1,8 @@
+import { AccountsService } from '../accounts/accounts.service';
+import { AccountInterceptor } from '../accounts/account.interceptor';
 import '../load-env';
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { AuthController } from './auth.controller';
@@ -25,6 +27,8 @@ import { JwtStrategy } from './jwt.strategy';
   controllers: [AuthController],
   providers: [
     AuthService,
+    AccountsService,
+    { provide: APP_INTERCEPTOR, useClass: AccountInterceptor },
     GoogleStrategy,
     JwtStrategy,
     { provide: APP_GUARD, useClass: JwtAuthGuard },

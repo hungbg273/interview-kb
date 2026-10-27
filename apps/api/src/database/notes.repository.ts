@@ -1,3 +1,4 @@
+import { currentAccount } from '../accounts/account-context';
 import { Injectable } from '@nestjs/common';
 import { DataSource, In } from 'typeorm';
 import { Note } from '../entities/note.entity';
@@ -16,12 +17,12 @@ const NOTE_RELATIONS = ['noteTopics', 'noteTopics.topic', 'questions'];
 @Injectable()
 export class NotesRepository extends BaseRepository<Note> {
   constructor(dataSource: DataSource) {
-    super(Note, dataSource);
+    super(Note, dataSource, true);
   }
 
   findDetail(id: string) {
     return this.repo.findOne({
-      where: { id },
+      where: this.ownedWhere({ id }),
       relations: NOTE_RELATIONS,
     });
   }
@@ -31,6 +32,7 @@ export class NotesRepository extends BaseRepository<Note> {
       .createQueryBuilder('note')
       .select(['note.id', 'note.title'])
       .where('LOWER(note.title) LIKE LOWER(:q)', { q: `%${q}%` })
+      .andWhere('note.user_id = :userId', { userId: currentAccount().id })
       .orderBy('note.updatedAt', 'DESC')
       .take(50)
       .getMany();
@@ -49,7 +51,7 @@ export class NotesRepository extends BaseRepository<Note> {
       });
       if (ids.length === 0) return [];
       const items = await this.repo.find({
-        where: { id: In(ids) },
+        where: this.ownedWhere({ id: In(ids) }),
         relations: NOTE_RELATIONS,
       });
       const order = new Map(ids.map((id, i) => [id, i]));
@@ -59,6 +61,7 @@ export class NotesRepository extends BaseRepository<Note> {
 
     const qb = this.repo
       .createQueryBuilder('note')
+      .where('note.user_id = :userId', { userId: currentAccount().id })
       .distinct(true)
       .leftJoinAndSelect('note.noteTopics', 'noteTopics')
       .leftJoinAndSelect('noteTopics.topic', 'topic')
@@ -68,10 +71,11 @@ export class NotesRepository extends BaseRepository<Note> {
       .take(filter.pageSize);
 
     if (filter.topicId) {
-      qb.innerJoin('note_topic', 'nt_filter', 'nt_filter.note_id = note.id').andWhere(
-        'nt_filter.topic_id = :topicId',
-        { topicId: filter.topicId },
-      );
+      qb.innerJoin(
+        'note_topic',
+        'nt_filter',
+        'nt_filter.note_id = note.id',
+      ).andWhere('nt_filter.topic_id = :topicId', { topicId: filter.topicId });
     }
     if (filter.uncategorized) {
       qb.andWhere(
@@ -91,8 +95,8 @@ export class NotesRepository extends BaseRepository<Note> {
       offset: number;
     },
   ): Promise<string[]> {
-    const params: unknown[] = [q];
-    let sql = `SELECT n.id FROM note n WHERE n.search_vector @@ plainto_tsquery('english', $1)`;
+    const params: unknown[] = [q, currentAccount().id];
+    let sql = `SELECT n.id FROM note n WHERE n.user_id=$2 AND n.search_vector @@ plainto_tsquery('english', $1)`;
     if (opts.topicId) {
       params.push(opts.topicId);
       sql += ` AND EXISTS (SELECT 1 FROM note_topic nt WHERE nt.note_id = n.id AND nt.topic_id = $${params.length})`;

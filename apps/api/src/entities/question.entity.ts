@@ -13,6 +13,9 @@ import { Note } from './note.entity';
 
 @Entity({ name: 'question' })
 export class Question {
+  @Column({ type: 'uuid', name: 'user_id' })
+  userId: string;
+
   @PrimaryGeneratedColumn('uuid')
   id: string;
 

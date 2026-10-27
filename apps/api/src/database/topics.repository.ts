@@ -1,3 +1,4 @@
+import { currentAccount } from '../accounts/account-context';
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { Topic } from '../entities/topic.entity';
@@ -6,7 +7,7 @@ import { BaseRepository } from './base.repository';
 @Injectable()
 export class TopicsRepository extends BaseRepository<Topic> {
   constructor(dataSource: DataSource) {
-    super(Topic, dataSource);
+    super(Topic, dataSource, true);
   }
 
   listRoots() {
@@ -15,6 +16,7 @@ export class TopicsRepository extends BaseRepository<Topic> {
       .where(
         `NOT EXISTS (SELECT 1 FROM topic_parent tp WHERE tp.child_id = topic.id)`,
       )
+      .andWhere('topic.user_id = :userId', { userId: currentAccount().id })
       .orderBy('topic.name', 'ASC')
       .getMany();
   }
@@ -24,12 +26,14 @@ export class TopicsRepository extends BaseRepository<Topic> {
       .createQueryBuilder('topic')
       .innerJoin('topic_parent', 'tp', 'tp.child_id = topic.id')
       .where('tp.parent_id = :parentId', { parentId })
+      .andWhere('topic.user_id = :userId', { userId: currentAccount().id })
       .orderBy('topic.name', 'ASC')
       .getMany();
   }
 
   async listNames(take = 40) {
     const rows = await this.repo.find({
+      where: this.ownedWhere(),
       select: ['name'],
       order: { name: 'ASC' },
       take,
@@ -41,6 +45,7 @@ export class TopicsRepository extends BaseRepository<Topic> {
     return this.repo
       .createQueryBuilder('topic')
       .where('LOWER(topic.name) LIKE LOWER(:q)', { q: `%${q}%` })
+      .andWhere('topic.user_id = :userId', { userId: currentAccount().id })
       .orderBy('topic.name', 'ASC')
       .take(50)
       .getMany();

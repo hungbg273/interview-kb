@@ -65,3 +65,9 @@ SSE works while the page is open. Closed-tab notifications need a later optional
 - Redis/API restarts and transient provider failures resolve to visible queued/retrying/terminal states, with no permanently orphaned pending UI.
 
 Sources: https://docs.nestjs.com/techniques/queues ; https://docs.nestjs.com/techniques/server-sent-events ; https://docs.bullmq.io/patterns/idempotent-jobs .
+
+## Implementation record
+
+Implemented note AI jobs and the CV/JD extension. The API runs a BullMQ consumer in the same process; PostgreSQL job/outbox and owner-scoped document drafts survive restarts. Redis is internal-only with AOF persistence. Source previews apply with a content-hash conflict check. The API Docker runtime is Node 24 for NestJS 12/Jest ESM compatibility.
+
+Verification includes 7 PostgreSQL/Redis integration cases in a disposable separate database (mocked model calls), owner-isolated SSE and JWT-expiry unit tests, frontend completion/idempotency/reordered-event tests, and the existing suites. Operational details and the exact retention/concurrency limits are in docs/ai-background-jobs.md.

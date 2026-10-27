@@ -8,5 +8,6 @@ import { LlmClient } from './llm.client';
   imports: [ChatgptModule],
   controllers: [AiController],
   providers: [AiService, LlmClient],
+  exports: [AiService],
 })
 export class AiModule {}

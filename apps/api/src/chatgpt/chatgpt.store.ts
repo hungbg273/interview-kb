@@ -11,6 +11,7 @@ import { resolve, join } from 'node:path';
 import { AppError } from '../common/app-error';
 
 export type ChatgptCredential = {
+  connectionId?: string;
   clientId: string;
   subject: string;
   email: string;

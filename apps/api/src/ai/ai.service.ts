@@ -1,3 +1,15 @@
+import { MARKDOWN_FORMAT } from "./prompts/markdown-format";
+export type AiPreparedRequest = {
+  provider: import('@kb/shared').AiProvider;
+  system: string;
+  user: string;
+  json?: boolean;
+  temperature?: number;
+  maxTokens?: number;
+  model?: string;
+  expectedConnection?: string;
+  style?: string;
+};
 import { Injectable } from '@nestjs/common';
 import { isValidMcq, type AiLang, type CreateQuestionBody } from '@kb/shared';
 import { AppError } from '../common/app-error';
@@ -48,7 +60,37 @@ export class AiService {
     private readonly llm: LlmClient,
   ) {}
 
+  async prepare(noteId: string, dto: RunAiDto) {
+    let request!: AiPreparedRequest;
+    // Reuse the exact action prompts and validation from run; capture before inference.
+    await this.execute(
+      noteId,
+      dto,
+      undefined,
+      async (input) => {
+        request = input;
+        return '';
+      },
+      true,
+    );
+    return request;
+  }
+
+  async generate(request: AiPreparedRequest, owner: string) {
+    return this.llm.complete({ ...request, owner, env: providerEnv() });
+  }
+
   async run(noteId: string, dto: RunAiDto, owner?: string) {
+    return this.execute(noteId, dto, owner);
+  }
+
+  private async execute(
+    noteId: string,
+    dto: RunAiDto,
+    owner?: string,
+    capture?: (input: AiPreparedRequest) => Promise<string>,
+    preparing = false,
+  ) {
     const note = await this.notes.findById(noteId, [
       'noteTopics',
       'noteTopics.topic',
@@ -56,6 +98,12 @@ export class AiService {
     if (!note) throw AppError.notFound('Note not found');
 
     const env = providerEnv();
+    const complete = (
+      request: AiPreparedRequest & { env: ProviderEnv; owner?: string },
+    ) => {
+      const { env: _env, owner: _owner, ...input } = request;
+      return capture ? capture(input) : this.llm.complete(request);
+    };
     const body = noteContext(note);
 
     if (
@@ -69,25 +117,25 @@ export class AiService {
           : dto.action === 'expand'
             ? 'Expand the note with interview-relevant detail. Plain language. Do not invent APIs or RFCs.'
             : 'Write a complete interview study note from the title and any draft. Match the title language. Short headings are ok. Do not invent APIs or fake RFCs.';
-      const markdown = await this.llm.complete({
+      const markdown = await complete({
         provider: dto.provider,
         owner,
         env,
-        system,
+        system: `${system}\n\n${MARKDOWN_FORMAT}`,
         user: body,
         temperature: 0.2,
-        maxTokens: 2500,
+        maxTokens: dto.action === 'summarize' ? 2500 : 20000,
       });
       return { markdown };
     }
 
     if (dto.action === 'translate-note') {
       const lang = this.requireLang(dto.targetLang);
-      const markdown = await this.llm.complete({
+      const markdown = await complete({
         provider: dto.provider,
         owner,
         env,
-        system: `Translate the note into ${LANG[lang]}. Keep structure. Do not add new facts.`,
+        system: `Translate the note into ${LANG[lang]}. Keep structure. Do not add new facts.\n\n${MARKDOWN_FORMAT}`,
         user: body,
         temperature: 0,
         maxTokens: 2500,
@@ -114,7 +162,7 @@ export class AiService {
       .filter(Boolean)
       .join('\n\n');
 
-    const raw = await this.llm.complete({
+    const raw = await complete({
       provider: dto.provider,
       owner,
       env,
@@ -125,6 +173,7 @@ export class AiService {
       user,
     });
 
+    if (preparing) return [];
     const list = parseLlmJsonArray(raw);
     const valid = list
       .filter((item): item is CreateQuestionBody => isValidMcq(item as never))

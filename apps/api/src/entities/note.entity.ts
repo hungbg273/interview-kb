@@ -13,6 +13,9 @@ import { Question } from './question.entity';
 @Check('note_body_markdown_length', 'char_length(body_markdown) <= 100000')
 @Entity({ name: 'note' })
 export class Note {
+  @Column({ type: 'uuid', name: 'user_id' })
+  userId: string;
+
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
@@ -21,6 +24,14 @@ export class Note {
 
   @Column({ type: 'text', name: 'body_markdown' })
   bodyMarkdown: string;
+
+  @Column({ type: 'jsonb', name: 'source_publication', nullable: true })
+  sourcePublication: {
+    publicationId: string;
+    author: string;
+    title: string;
+    publishedAt: string;
+  } | null;
 
   @OneToMany(() => NoteTopic, (noteTopic) => noteTopic.note)
   noteTopics: NoteTopic[];

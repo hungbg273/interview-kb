@@ -4,9 +4,10 @@ import Link from 'next/link';
 import { installHistoryGuard } from '@/lib/navigation-history';
 import { createContext, useCallback, useContext, useEffect, useRef } from 'react';
 
-const NavigationContext = createContext<{register: (token: symbol) => () => void; canNavigate: () => boolean}>({
+const NavigationContext = createContext<{register: (token: symbol) => () => void; canNavigate: () => boolean; hasUnsavedChanges: () => boolean}>({
   register: (_token: symbol) => () => {},
   canNavigate: () => true,
+  hasUnsavedChanges: () => false,
 });
 
 export function WorkspaceNavigationProvider({children}: {children: React.ReactNode}) {
@@ -17,7 +18,7 @@ export function WorkspaceNavigationProvider({children}: {children: React.ReactNo
   }, []);
   const canNavigate = useCallback(() => blockers.current.size === 0 || window.confirm('Bạn có thay đổi chưa lưu. Bỏ thay đổi để chuyển trang?'), []);
   useEffect(() => installHistoryGuard(canNavigate),[canNavigate]);
-  return <NavigationContext.Provider value={{register,canNavigate}}>{children}</NavigationContext.Provider>;
+  return <NavigationContext.Provider value={{register,canNavigate,hasUnsavedChanges:()=>blockers.current.size>0}}>{children}</NavigationContext.Provider>;
 }
 
 export function useUnsavedChanges(dirty: boolean) {
@@ -43,3 +44,5 @@ export function WorkspaceLink({onClick, ...props}: React.ComponentProps<typeof L
 
 
 export function useCanNavigate() { return useContext(NavigationContext).canNavigate; }
+
+export function useHasUnsavedChanges() { return useContext(NavigationContext).hasUnsavedChanges; }

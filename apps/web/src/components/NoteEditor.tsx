@@ -1,3 +1,4 @@
+import { MarkdownField } from "./MarkdownField";
 import { useState } from "react";
 
 export function NoteEditor(props: {
@@ -84,15 +85,11 @@ export function NoteEditor(props: {
           </div>
         )}
         {props.error && <p className="error">{props.error}</p>}
-        <label>
-          Nội dung
-          <textarea
-            className="pad"
-            value={props.bodyMarkdown}
-            onChange={(e) => props.onBodyChange(e.target.value)}
-            placeholder="Viết tự do. Không cần Markdown."
-          />
-        </label>
+        <MarkdownField
+          value={props.bodyMarkdown}
+          onChange={props.onBodyChange}
+          disabled={saving || props.disabled}
+        />
         <button
           type="button"
           className="editor-save"

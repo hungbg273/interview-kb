@@ -255,3 +255,25 @@ describe('AiService', () => {
     ).rejects.toMatchObject({ code: ERROR_CODES.AI_NOT_CONFIGURED });
   });
 });
+
+describe('Markdown result format',()=>{
+ it.each(['summarize','expand','generate-content','translate-note'] as const)('captures Markdown and Mermaid instructions for %s',async(action)=>{
+  const svc=new AiService({findById:jest.fn().mockResolvedValue({id:'n1',title:'TCP',bodyMarkdown:'Body'})} as never,{} as never,{} as never);
+  const prepared=await svc.prepare('n1',{action,provider:'chatgpt',targetLang:'vi'});
+  expect(prepared.system).toContain('```mermaid');
+  expect(prepared.system).toContain('Do not wrap the entire response');
+ });
+});
+
+it('keeps structured question prompts free of Markdown output instructions',async()=>{
+ const svc=new AiService({findById:jest.fn().mockResolvedValue({id:'n1',title:'TCP',bodyMarkdown:'Body'})} as never,{listByNote:jest.fn().mockResolvedValue([]),listRecentAiByNote:jest.fn().mockResolvedValue([])} as never,{} as never);
+ const prepared=await svc.prepare('n1',{action:'generate-questions',provider:'chatgpt',targetLang:'vi'});
+ expect(prepared.system).toContain('Return JSON');
+ expect(prepared.system).not.toContain('Return Markdown content only');
+});
+
+it.each(['expand','generate-content'] as const)('captures a 20000-token output budget for %s jobs',async(action)=>{
+ const svc=new AiService({findById:jest.fn().mockResolvedValue({id:'n1',title:'NestJS request lifecycle',bodyMarkdown:'Lifecycle'})} as never,{} as never,{} as never);
+ const prepared=await svc.prepare('n1',{action,provider:'deepseek'});
+ expect(prepared.maxTokens).toBe(20000);
+});

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { ChatgptConnectionPanel } from "./ChatgptConnectionPanel";
 import { AiAction, AiDifficulty, AiLang, AiProvider } from "@kb/shared";
 
@@ -10,6 +11,7 @@ export type AiRunPayload = {
 
 export function AiPanel(props: {
   busy?: boolean;
+  busyLabel?: string;
   hasUnsavedChanges?: boolean;
   provider: AiProvider;
   lastRun: AiRunPayload;
@@ -26,12 +28,32 @@ export function AiPanel(props: {
   onApply: () => void;
   onDiscard: () => void;
 }) {
+  const previewRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (props.preview)
+      previewRef.current?.scrollIntoView?.({ block: "nearest" });
+  }, [props.preview]);
   return (
     <section className="panel ai-panel" aria-busy={!!props.busy}>
       <h2>AI</h2>
+      {props.preview && (
+        <div ref={previewRef} role="region" aria-label="Kết quả AI">
+          <h3>Kết quả AI</h3>
+          <p className="field-hint">
+            Xem lại nội dung trước khi áp dụng vào ghi chú.
+          </p>
+          <pre className="ai-preview">{props.preview}</pre>
+          <button type="button" disabled={props.busy} onClick={props.onApply}>
+            Áp dụng
+          </button>
+          <button type="button" disabled={props.busy} onClick={props.onDiscard}>
+            Huỷ
+          </button>
+        </div>
+      )}
       {props.busy && (
         <p className="working-status" role="status">
-          AI đang xử lý…
+          {props.busyLabel || "AI đang xử lý…"}
         </p>
       )}
       {props.hasUnsavedChanges && (
@@ -161,20 +183,6 @@ export function AiPanel(props: {
             onClick={() => props.onRun(props.lastRun)}
           >
             Thử lại
-          </button>
-        </div>
-      )}
-      {props.preview && (
-        <div>
-          <p className="field-hint">
-            Xem lại nội dung trước khi áp dụng vào ghi chú.
-          </p>
-          <pre className="ai-preview">{props.preview}</pre>
-          <button type="button" disabled={props.busy} onClick={props.onApply}>
-            Áp dụng
-          </button>
-          <button type="button" disabled={props.busy} onClick={props.onDiscard}>
-            Huỷ
           </button>
         </div>
       )}

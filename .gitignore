@@ -8,3 +8,15 @@ coverage/
 *.log
 .DS_Store
 .chatgpt/
+!docs/ai-background-jobs.md
+!apps/api/Dockerfile
+!docs/superpowers/specs/2026-10-27-ai-job-preview-modal-design.md
+!docs/superpowers/plans/2026-10-27-ai-job-preview-modal.md
+apps/web/public/vendor/mermaid/
+!apps/web/Dockerfile
+!docs/superpowers/plans/2026-10-27-markdown-mermaid.md
+*.tsbuildinfo
+
+.local-backups/
+!docs/superpowers/plans/2026-10-27-personal-libraries.md
+!docs/personal-libraries.md

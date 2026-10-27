@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -90,6 +91,7 @@ it("preserves unsaved note edits when the question list refreshes", async () => 
   fireEvent.change(screen.getByLabelText("Tiêu đề"), {
     target: { value: "Unsaved title" },
   });
+  fireEvent.click(screen.getByRole("button", { name: "Chỉnh sửa" }));
   fireEvent.change(screen.getByLabelText("Nội dung"), {
     target: { value: "Unsaved body" },
   });
@@ -103,4 +105,52 @@ it("preserves unsaved note edits when the question list refreshes", async () => 
   );
   expect(screen.getByLabelText("Tiêu đề")).toHaveValue("Unsaved title");
   expect(screen.getByLabelText("Nội dung")).toHaveValue("Unsaved body");
+});
+
+it("preserves edits made while an applied AI result is being refreshed", async () => {
+  let resolveRefresh: (value: unknown) => void = () => {};
+  let reads = 0;
+  api.mockImplementation(async (path: string) => {
+    if (path === "/notes") return { items: [] };
+    if (path === "/notes/n1") {
+      reads++;
+      if (reads > 1)
+        return new Promise((resolve) => {
+          resolveRefresh = resolve;
+        });
+      return {
+        title: "Saved",
+        bodyMarkdown: "Body",
+        topics: [],
+        questions: [],
+      };
+    }
+    throw new Error(path);
+  });
+  render(
+    <NotesProvider>
+      <NotePage />
+    </NotesProvider>,
+  );
+  await waitFor(() =>
+    expect(screen.getByLabelText("Tiêu đề")).toHaveValue("Saved"),
+  );
+  window.dispatchEvent(
+    new CustomEvent("ai-note-applied", { detail: { noteId: "n1" } }),
+  );
+  await waitFor(() => expect(reads).toBe(2));
+  fireEvent.change(screen.getByLabelText("Tiêu đề"), {
+    target: { value: "My new edit" },
+  });
+  await act(async () => {
+    resolveRefresh({
+      title: "AI title",
+      bodyMarkdown: "AI body",
+      topics: [],
+      questions: [],
+    });
+  });
+  await waitFor(() =>
+    expect(screen.getByLabelText("Tiêu đề")).toHaveValue("My new edit"),
+  );
 });

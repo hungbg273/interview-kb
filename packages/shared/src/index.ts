@@ -78,3 +78,11 @@ export function isValidMcq(input: {
     letters.includes(input.correctChoice as CorrectChoice)
   );
 }
+export type AiJobStatus = 'queued' | 'running' | 'retrying' | 'succeeded' | 'failed';
+export type AiJobView = {
+  id: string; noteId: string | null; noteTitle: string; action: AiAction | 'import-document'; provider: AiProvider;
+  status: AiJobStatus; stage: string; revision: number; attempts: number;
+  createdAt: string; updatedAt: string; expiresAt: string;
+  error: {code: string; message: string} | null;
+};
+export type AiJobResult = {markdown?: string; questionIds?: string[]; sourceHash: string;draftId?:string;items?:Array<{id:string;prompt:string;choiceA:string;choiceB:string;choiceC:string;choiceD:string;suggestedTopics:string[]}>};

@@ -1,9 +1,13 @@
-'use client';
+"use client";
 
-import { ChatgptConnectionPanel } from '@/components/ChatgptConnectionPanel';
-import { api, ApiError } from '@/lib/api';
-import { AiLang } from '@kb/shared';
-import { useEffect, useState } from 'react';
+import { useAiJobs } from "@/components/AiJobsProvider";
+import { AiJobStatus } from "@/components/AiJobStatus";
+import { activeJob } from "@/lib/ai-jobs";
+import type { AiJobResult } from "@kb/shared";
+import { ChatgptConnectionPanel } from "@/components/ChatgptConnectionPanel";
+import { api, ApiError } from "@/lib/api";
+import { AiLang } from "@kb/shared";
+import { useEffect, useState } from "react";
 
 type Chip = { id: string; label: string };
 type SearchHits = { notes: Chip[]; topics: Chip[] };
@@ -33,14 +37,14 @@ type KeepState = {
 };
 type DraftBundle = { draftId: string; items: QuizQuestion[] };
 
-const letters = ['A', 'B', 'C', 'D'] as const;
-const levels = ['fresher', 'junior', 'middle', 'senior', 'expert'] as const;
+const letters = ["A", "B", "C", "D"] as const;
+const levels = ["fresher", "junior", "middle", "senior", "expert"] as const;
 
 function emptyKeep(item: QuizQuestion): KeepState {
   return {
     keep: false,
     note: null,
-    topicNames: (item.suggestedTopics ?? []).join(', '),
+    topicNames: (item.suggestedTopics ?? []).join(", "),
   };
 }
 
@@ -49,8 +53,12 @@ function addChip(list: Chip[], hit: Chip) {
 }
 
 function mergeGrades(parts: GradeResult[], order: string[]): GradeResult {
-  const byId = new Map(parts.flatMap((part) => part.items.map((item) => [item.questionId, item])));
-  const items = order.map((id) => byId.get(id)).filter((item): item is GradeItem => Boolean(item));
+  const byId = new Map(
+    parts.flatMap((part) => part.items.map((item) => [item.questionId, item])),
+  );
+  const items = order
+    .map((id) => byId.get(id))
+    .filter((item): item is GradeItem => Boolean(item));
   return {
     total: items.length,
     correct: items.filter((item) => item.ok).length,
@@ -59,7 +67,7 @@ function mergeGrades(parts: GradeResult[], order: string[]): GradeResult {
 }
 
 function Practice() {
-  const [q, setQ] = useState('');
+  const [q, setQ] = useState("");
   const [hits, setHits] = useState<SearchHits>({ notes: [], topics: [] });
   const [pickedNotes, setPickedNotes] = useState<Chip[]>([]);
   const [pickedTopics, setPickedTopics] = useState<Chip[]>([]);
@@ -68,25 +76,34 @@ function Practice() {
   const [cvFile, setCvFile] = useState<File | null>(null);
   const [jdFile, setJdFile] = useState<File | null>(null);
   const [limit, setLimit] = useState(10);
-  const [lang, setLang] = useState<AiLang>('vi');
-  const [level, setLevel] = useState<(typeof levels)[number]>('junior');
+  const [lang, setLang] = useState<AiLang>("vi");
+  const [level, setLevel] = useState<(typeof levels)[number]>("junior");
   const [drafts, setDrafts] = useState<DraftBundle[]>([]);
   const [draftItems, setDraftItems] = useState<QuizQuestion[]>([]);
   const [keeps, setKeeps] = useState<Record<string, KeepState>>({});
-  const [phase, setPhase] = useState<'setup' | 'review' | 'quiz' | 'results'>('setup');
+  const [phase, setPhase] = useState<"setup" | "review" | "quiz" | "results">(
+    "setup",
+  );
   const [empty, setEmpty] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [items, setItems] = useState<QuizQuestion[]>([]);
   const [index, setIndex] = useState(0);
   const [choice, setChoice] = useState<string | null>(null);
-  const [answers, setAnswers] = useState<Array<{ questionId: string; choice: string }>>([]);
+  const [answers, setAnswers] = useState<
+    Array<{ questionId: string; choice: string }>
+  >([]);
   const [result, setResult] = useState<GradeResult | null>(null);
 
   const fromDoc = useCv || useJd;
   const hasPool = pickedNotes.length > 0 || pickedTopics.length > 0;
-  const noteHits = hits.notes.filter((hit) => !pickedNotes.some((item) => item.id === hit.id));
-  const topicHits = hits.topics.filter((hit) => !pickedTopics.some((item) => item.id === hit.id));
-  const showDropdown = phase === 'setup' && (noteHits.length > 0 || topicHits.length > 0);
+  const noteHits = hits.notes.filter(
+    (hit) => !pickedNotes.some((item) => item.id === hit.id),
+  );
+  const topicHits = hits.topics.filter(
+    (hit) => !pickedTopics.some((item) => item.id === hit.id),
+  );
+  const showDropdown =
+    phase === "setup" && (noteHits.length > 0 || topicHits.length > 0);
 
   useEffect(() => {
     const query = q.trim();
@@ -95,9 +112,10 @@ function Practice() {
       return;
     }
     let cancelled = false;
-    void api<{ topics: Array<{ id: string; name: string }>; notes: Array<{ id: string; title: string }> }>(
-      `/search?q=${encodeURIComponent(query)}`,
-    ).then((data) => {
+    void api<{
+      topics: Array<{ id: string; name: string }>;
+      notes: Array<{ id: string; title: string }>;
+    }>(`/search?q=${encodeURIComponent(query)}`).then((data) => {
       if (cancelled) return;
       setHits({
         notes: data.notes.map((n) => ({ id: n.id, label: n.title })),
@@ -110,7 +128,7 @@ function Practice() {
   }, [q]);
 
   function closeSearch() {
-    setQ('');
+    setQ("");
     setHits({ notes: [], topics: [] });
   }
 
@@ -126,57 +144,96 @@ function Practice() {
 
   async function fetchPool() {
     const params = new URLSearchParams();
-    for (const note of pickedNotes) params.append('noteId', note.id);
-    for (const topic of pickedTopics) params.append('topicId', topic.id);
-    params.set('limit', String(limit));
-    params.set('lang', lang);
-    return api<{ items: QuizQuestion[] }>(`/practice/questions?${params.toString()}`);
+    for (const note of pickedNotes) params.append("noteId", note.id);
+    for (const topic of pickedTopics) params.append("topicId", topic.id);
+    params.set("limit", String(limit));
+    params.set("lang", lang);
+    return api<{ items: QuizQuestion[] }>(
+      `/practice/questions?${params.toString()}`,
+    );
   }
 
-  async function postImport(source: 'cv' | 'jd', file: File | null) {
+  const { jobs, selectedJobId, selectionVersion, submitImport } = useAiJobs();
+  const [importJobIds, setImportJobIds] = useState<string[]>([]);
+  const [importSubmitting, setImportSubmitting] = useState(false);
+  const importJobs = jobs.filter((job) => importJobIds.includes(job.id));
+  useEffect(() => {
+    if (
+      jobs.some(
+        (job) => job.id === selectedJobId && job.action === "import-document",
+      )
+    )
+      setPhase("setup");
+  }, [selectedJobId, selectionVersion]);
+  useEffect(() => {
+    if (
+      jobs.some(
+        (job) => job.id === selectedJobId && job.action === "import-document",
+      )
+    )
+      setImportJobIds((ids) =>
+        ids.includes(selectedJobId!) ? ids : [selectedJobId!],
+      );
+  }, [selectedJobId, jobs]);
+  async function openImportResults() {
+    if (!importJobIds.length) return;
+    const bundles: DraftBundle[] = [];
+    for (const id of importJobIds.filter((id) =>
+      jobs.some((job) => job.id === id && job.status === "succeeded"),
+    )) {
+      const data = await api<AiJobResult>(`/ai-jobs/${id}/result`);
+      if (!data.draftId || !data.items)
+        throw new Error("Chưa có câu hỏi tài liệu.");
+      bundles.push({
+        draftId: data.draftId,
+        items: data.items.map((item) => ({ ...item, draftId: data.draftId })),
+      });
+    }
+    if (!bundles.length) throw new Error("Chưa có tài liệu xử lý xong.");
+    const nextItems = bundles.flatMap((bundle) => bundle.items);
+    setDrafts(bundles);
+    setDraftItems(nextItems);
+    setKeeps(
+      Object.fromEntries(nextItems.map((item) => [item.id, emptyKeep(item)])),
+    );
+    setPhase("review");
+  }
+  async function postImport(source: "cv" | "jd", file: File | null) {
     const body = new FormData();
-    body.append('source', source);
-    body.append('lang', lang);
-    body.append('level', level);
-    if (file) body.append('file', file);
-    return api<{ draftId: string; items: QuizQuestion[] }>('/practice/imports', {
-      method: 'POST',
-      body,
-    });
+    body.append("source", source);
+    body.append("lang", lang);
+    body.append("level", level);
+    if (file) body.append("file", file);
+    return submitImport(body);
   }
 
   async function generateFromDoc() {
-    setError('');
+    if (importSubmitting || importJobs.some(activeJob)) return;
+    setImportSubmitting(true);
+    setError("");
+    setImportJobIds([]);
     try {
-      const bundles: DraftBundle[] = [];
       if (useCv) {
-        const data = await postImport('cv', cvFile);
-        bundles.push({
-          draftId: data.draftId,
-          items: data.items.map((item) => ({ ...item, draftId: data.draftId })),
-        });
+        const job = await postImport("cv", cvFile);
+        setImportJobIds((ids) => [...new Set([...ids, job.id])]);
       }
       if (useJd) {
-        const data = await postImport('jd', jdFile);
-        bundles.push({
-          draftId: data.draftId,
-          items: data.items.map((item) => ({ ...item, draftId: data.draftId })),
-        });
+        const job = await postImport("jd", jdFile);
+        setImportJobIds((ids) => [...new Set([...ids, job.id])]);
       }
-      const nextItems = bundles.flatMap((bundle) => bundle.items);
-      setDrafts(bundles);
-      setDraftItems(nextItems);
-      setKeeps(Object.fromEntries(nextItems.map((item) => [item.id, emptyKeep(item)])));
-      setPhase('review');
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Không sinh được câu hỏi');
+      setError(
+        e instanceof Error ? e.message : "Không gửi được yêu cầu tạo câu hỏi.",
+      );
+    } finally {
+      setImportSubmitting(false);
     }
   }
 
   async function startFromPool() {
     if (!hasPool) return;
     setEmpty(false);
-    setError('');
+    setError("");
     try {
       const data = await fetchPool();
       if (data.items.length === 0) {
@@ -185,25 +242,27 @@ function Practice() {
       }
       beginQuiz(data.items);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Không bắt đầu được');
+      setError(e instanceof ApiError ? e.message : "Không bắt đầu được");
     }
   }
 
   async function startFromReview() {
-    const selected = draftItems.filter((item) => keeps[item.id]?.keep && keeps[item.id]?.note);
-    setError('');
+    const selected = draftItems.filter(
+      (item) => keeps[item.id]?.keep && keeps[item.id]?.note,
+    );
+    setError("");
     try {
       for (const bundle of drafts) {
         const kept = selected.filter((item) => item.draftId === bundle.draftId);
         if (kept.length === 0) continue;
         await api(`/practice/imports/${bundle.draftId}`, {
-          method: 'PATCH',
+          method: "PATCH",
           body: JSON.stringify({
             keeps: kept.map((item) => ({
               questionId: item.id,
               noteId: keeps[item.id].note!.id,
               topicNames: keeps[item.id].topicNames
-                .split(',')
+                .split(",")
                 .map((name) => name.trim())
                 .filter(Boolean),
             })),
@@ -222,7 +281,7 @@ function Practice() {
       }
       beginQuiz(nextItems);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Không bắt đầu được');
+      setError(e instanceof ApiError ? e.message : "Không bắt đầu được");
     }
   }
 
@@ -232,7 +291,7 @@ function Practice() {
     setChoice(null);
     setAnswers([]);
     setResult(null);
-    setPhase('quiz');
+    setPhase("quiz");
   }
 
   async function commitChoice() {
@@ -262,37 +321,42 @@ function Practice() {
       for (const [draftId, draftAnswers] of byDraft) {
         parts.push(
           await api<GradeResult>(`/practice/imports/${draftId}/grade`, {
-            method: 'POST',
+            method: "POST",
             body: JSON.stringify({ answers: draftAnswers }),
           }),
         );
       }
       if (poolAnswers.length > 0) {
         parts.push(
-          await api<GradeResult>('/practice/grade', {
-            method: 'POST',
+          await api<GradeResult>("/practice/grade", {
+            method: "POST",
             body: JSON.stringify({ answers: poolAnswers }),
           }),
         );
       }
-      setResult(mergeGrades(parts, nextAnswers.map((answer) => answer.questionId)));
-      setPhase('results');
+      setResult(
+        mergeGrades(
+          parts,
+          nextAnswers.map((answer) => answer.questionId),
+        ),
+      );
+      setPhase("results");
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Không chấm được');
+      setError(e instanceof ApiError ? e.message : "Không chấm được");
     }
   }
 
   function reset() {
-    setPhase('setup');
+    setPhase("setup");
     setEmpty(false);
-    setError('');
+    setError("");
     setItems([]);
     setResult(null);
     setPickedNotes([]);
     setPickedTopics([]);
     setUseCv(false);
     setUseJd(false);
-    setQ('');
+    setQ("");
     setHits({ notes: [], topics: [] });
     setCvFile(null);
     setJdFile(null);
@@ -302,16 +366,23 @@ function Practice() {
   }
 
   const current = items[index];
-  const canStartDraft = draftItems.some((item) => keeps[item.id]?.keep && keeps[item.id]?.note);
+  const canStartDraft = draftItems.some(
+    (item) => keeps[item.id]?.keep && keeps[item.id]?.note,
+  );
   const canStartReview = canStartDraft || hasPool;
 
   return (
     <main className="practice">
-      {phase === 'setup' && (
+      {phase === "setup" && (
         <section className="sheet">
           <h1>Luyện tập</h1>
-          <p className="kicker">Chọn ghi chú, chủ đề, hoặc tải CV/JD — có thể mix.</p>
+          <p className="kicker">
+            Chọn ghi chú, chủ đề, hoặc tải CV/JD — có thể mix.
+          </p>
           {(useCv || useJd) && <ChatgptConnectionPanel />}
+          {importJobs.map((job) => (
+            <AiJobStatus key={job.id} job={job} onResult={openImportResults} />
+          ))}
           <div className="search-field">
             <input
               value={q}
@@ -324,7 +395,12 @@ function Practice() {
                   <>
                     <h2>Ghi chú</h2>
                     {noteHits.map((hit) => (
-                      <button key={hit.id} type="button" className="ghost" onClick={() => pickNote(hit)}>
+                      <button
+                        key={hit.id}
+                        type="button"
+                        className="ghost"
+                        onClick={() => pickNote(hit)}
+                      >
                         {hit.label}
                       </button>
                     ))}
@@ -334,7 +410,12 @@ function Practice() {
                   <>
                     <h2>Chủ đề</h2>
                     {topicHits.map((hit) => (
-                      <button key={hit.id} type="button" className="ghost" onClick={() => pickTopic(hit)}>
+                      <button
+                        key={hit.id}
+                        type="button"
+                        className="ghost"
+                        onClick={() => pickTopic(hit)}
+                      >
                         {hit.label}
                       </button>
                     ))}
@@ -352,7 +433,11 @@ function Practice() {
                     type="button"
                     className="ghost"
                     aria-label={`Bỏ ${note.label}`}
-                    onClick={() => setPickedNotes((prev) => prev.filter((item) => item.id !== note.id))}
+                    onClick={() =>
+                      setPickedNotes((prev) =>
+                        prev.filter((item) => item.id !== note.id),
+                      )
+                    }
                   >
                     ×
                   </button>
@@ -365,7 +450,11 @@ function Practice() {
                     type="button"
                     className="ghost"
                     aria-label={`Bỏ ${topic.label}`}
-                    onClick={() => setPickedTopics((prev) => prev.filter((item) => item.id !== topic.id))}
+                    onClick={() =>
+                      setPickedTopics((prev) =>
+                        prev.filter((item) => item.id !== topic.id),
+                      )
+                    }
                   >
                     ×
                   </button>
@@ -375,10 +464,20 @@ function Practice() {
           )}
           <div className="sources">
             <label>
-              <input type="checkbox" checked={useCv} onChange={(e) => setUseCv(e.target.checked)} /> Từ CV
+              <input
+                type="checkbox"
+                checked={useCv}
+                onChange={(e) => setUseCv(e.target.checked)}
+              />{" "}
+              Từ CV
             </label>
             <label>
-              <input type="checkbox" checked={useJd} onChange={(e) => setUseJd(e.target.checked)} /> Từ JD
+              <input
+                type="checkbox"
+                checked={useJd}
+                onChange={(e) => setUseJd(e.target.checked)}
+              />{" "}
+              Từ JD
             </label>
           </div>
           <div className="form-grid">
@@ -394,7 +493,10 @@ function Practice() {
             </label>
             <label>
               Ngôn ngữ
-              <select value={lang} onChange={(e) => setLang(e.target.value as AiLang)}>
+              <select
+                value={lang}
+                onChange={(e) => setLang(e.target.value as AiLang)}
+              >
                 <option value="vi">Tiếng Việt</option>
                 <option value="en">English</option>
               </select>
@@ -406,7 +508,9 @@ function Practice() {
                 Cấp
                 <select
                   value={level}
-                  onChange={(e) => setLevel(e.target.value as (typeof levels)[number])}
+                  onChange={(e) =>
+                    setLevel(e.target.value as (typeof levels)[number])
+                  }
                 >
                   {levels.map((value) => (
                     <option key={value} value={value}>
@@ -438,12 +542,20 @@ function Practice() {
             </div>
           )}
           {fromDoc && (
-            <button type="button" onClick={() => void generateFromDoc()}>
+            <button
+              type="button"
+              disabled={importSubmitting || importJobs.some(activeJob)}
+              onClick={() => void generateFromDoc()}
+            >
               Sinh câu hỏi
             </button>
           )}
           {!fromDoc && (
-            <button type="button" disabled={!hasPool} onClick={() => void startFromPool()}>
+            <button
+              type="button"
+              disabled={!hasPool}
+              onClick={() => void startFromPool()}
+            >
               Bắt đầu
             </button>
           )}
@@ -452,7 +564,7 @@ function Practice() {
         </section>
       )}
 
-      {phase === 'review' && (
+      {phase === "review" && (
         <section className="sheet">
           <h1>Chọn câu giữ lại</h1>
           <div className="search-field">
@@ -478,12 +590,13 @@ function Practice() {
                             [item.id]: { ...state, keep: e.target.checked },
                           }))
                         }
-                      />{' '}
+                      />{" "}
                       Giữ
                     </label>
                     <p>{item.prompt}</p>
                     <p>
-                      A. {item.choiceA} / B. {item.choiceB} / C. {item.choiceC} / D. {item.choiceD}
+                      A. {item.choiceA} / B. {item.choiceB} / C. {item.choiceC}{" "}
+                      / D. {item.choiceD}
                     </p>
                     <label>
                       Chủ đề
@@ -497,7 +610,11 @@ function Practice() {
                         }
                       />
                     </label>
-                    <p>{state.note ? `Ghi chú: ${state.note.label}` : 'Chưa chọn ghi chú'}</p>
+                    <p>
+                      {state.note
+                        ? `Ghi chú: ${state.note.label}`
+                        : "Chưa chọn ghi chú"}
+                    </p>
                     {hits.notes.map((hit) => (
                       <button
                         key={`${item.id}-${hit.id}`}
@@ -518,7 +635,11 @@ function Practice() {
               );
             })}
           </ul>
-          <button type="button" disabled={!canStartReview} onClick={() => void startFromReview()}>
+          <button
+            type="button"
+            disabled={!canStartReview}
+            onClick={() => void startFromReview()}
+          >
             Bắt đầu
           </button>
           {empty && <p className="empty">Chưa có câu hỏi cho lựa chọn này</p>}
@@ -526,7 +647,7 @@ function Practice() {
         </section>
       )}
 
-      {phase === 'quiz' && current && (
+      {phase === "quiz" && current && (
         <section className="sheet">
           <p className="kicker">
             Câu {index + 1} / {items.length}
@@ -554,14 +675,18 @@ function Practice() {
               );
             })}
           </div>
-          <button type="button" disabled={!choice} onClick={() => void commitChoice()}>
-            {index + 1 < items.length ? 'Câu tiếp' : 'Nộp bài'}
+          <button
+            type="button"
+            disabled={!choice}
+            onClick={() => void commitChoice()}
+          >
+            {index + 1 < items.length ? "Câu tiếp" : "Nộp bài"}
           </button>
           {error && <p className="banner">{error}</p>}
         </section>
       )}
 
-      {phase === 'results' && result && (
+      {phase === "results" && result && (
         <section className="sheet">
           <h1>
             Đúng {result.correct} / {result.total}
@@ -572,10 +697,12 @@ function Practice() {
                 <div>
                   <p>{item.prompt}</p>
                   <p>
-                    Bạn chọn {item.choice} — đáp án {item.correctChoice} —{' '}
-                    {item.ok ? 'đúng' : 'sai'}
+                    Bạn chọn {item.choice} — đáp án {item.correctChoice} —{" "}
+                    {item.ok ? "đúng" : "sai"}
                   </p>
-                  {item.explanationMarkdown && <p>{item.explanationMarkdown}</p>}
+                  {item.explanationMarkdown && (
+                    <p>{item.explanationMarkdown}</p>
+                  )}
                 </div>
               </li>
             ))}

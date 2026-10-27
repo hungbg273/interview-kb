@@ -26,6 +26,9 @@ export class LlmClient {
   constructor(@Optional() private readonly chatgpt?: ChatgptClient) {}
   async complete(opts: {
     owner?: string;
+    model?: string;
+    expectedConnection?: string;
+    style?: string;
     provider: AiProvider;
     env: ProviderEnv;
     system: string;
@@ -34,7 +37,7 @@ export class LlmClient {
     maxTokens?: number;
     temperature?: number;
   }): Promise<string> {
-    const system = `${VIETNAMESE_STYLE}\n\n${opts.system}`;
+    const system = `${opts.style ?? VIETNAMESE_STYLE}\n\n${opts.system}`;
     if (opts.provider === 'chatgpt') {
       if (!this.chatgpt)
         throw AppError.aiNotConfigured('Kết nối ChatGPT chưa khả dụng.');
@@ -58,7 +61,7 @@ export class LlmClient {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: cfg.model,
+            model: opts.model || cfg.model,
             messages: [
               { role: 'system', content: system },
               { role: 'user', content: opts.user },

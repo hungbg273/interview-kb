@@ -1,5 +1,9 @@
 "use client";
+import { PublicationControls } from "@/components/PublicationControls";
 
+import { useAiJobs } from "@/components/AiJobsProvider";
+import { AiJobStatus } from "@/components/AiJobStatus";
+import { activeJob, jobStatusLabel } from "@/lib/ai-jobs";
 import { NoteWorkspace } from "@/components/NoteWorkspace";
 
 import { AiPanel, type AiRunPayload } from "@/components/AiPanel";
@@ -46,6 +50,9 @@ function EditNote() {
   const [loadFailed, setLoadFailed] = useState(false);
   const [dirty, setDirty] = useState(false);
   useUnsavedChanges(dirty);
+  const editRevision = useRef(0);
+  const latestDraft = useRef({ dirty, id });
+  latestDraft.current = { dirty, id };
   const [questions, setQuestions] = useState<Question[]>([]);
   const [form, setForm] = useState<CreateQuestionBody>(emptyForm);
   const [provider, setProvider] = useState<AiProvider>("chatgpt");
@@ -53,22 +60,74 @@ function EditNote() {
   const [questionCount, setQuestionCount] = useState(5);
   const [difficulty, setDifficulty] = useState<AiDifficulty>("medium");
   const [questionLang, setQuestionLang] = useState<AiLang>("vi");
-  const [preview, setPreview] = useState("");
   const [aiError, setAiError] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
   const aiPending = useRef(false);
+  const { jobs, selectedJobId, selectionVersion, submit, openPreview } =
+    useAiJobs();
+  const noteJobs = jobs.filter((job) => job.noteId === id);
+  const active = noteJobs.find(activeJob);
+  const displayedJob =
+    noteJobs.find((job) => job.id === selectedJobId) || active || noteJobs[0];
+  const refreshedJobs = useRef(new Set<string>());
+  useEffect(() => {
+    if (selectedJobId) setRightTab("ai");
+  }, [selectedJobId, selectionVersion]);
+  useEffect(() => {
+    for (const job of noteJobs) {
+      if (
+        job.status === "succeeded" &&
+        job.action === "generate-questions" &&
+        !refreshedJobs.current.has(job.id)
+      ) {
+        refreshedJobs.current.add(job.id);
+        void refreshQuestions().catch(() =>
+          setAiError("Không tải được câu hỏi mới. Vui lòng thử lại."),
+        );
+      }
+    }
+  }, [jobs, selectedJobId]);
   const { notes, refresh: refreshNotes, error: notesError } = useNoteList();
+  const [sourcePublication, setSourcePublication] = useState<{
+    author: string;
+    title: string;
+  } | null>(null);
   const [topics, setTopics] = useState<TopicChip[]>([]);
   const [topicQuery, setTopicQuery] = useState("");
   const [topicHits, setTopicHits] = useState<TopicChip[]>([]);
 
-  async function load() {
+  useEffect(() => {
+    const applied = (event: Event) => {
+      const revision = editRevision.current;
+      if (
+        (event as CustomEvent<{ noteId: string }>).detail.noteId === id &&
+        !dirty
+      )
+        void load(
+          () =>
+            !latestDraft.current.dirty &&
+            latestDraft.current.id === id &&
+            editRevision.current === revision,
+        ).catch(() =>
+          setAiError(
+            "Đã áp dụng nhưng chưa tải lại được ghi chú. Vui lòng tải lại trang.",
+          ),
+        );
+    };
+    window.addEventListener("ai-note-applied", applied);
+    return () => window.removeEventListener("ai-note-applied", applied);
+  }, [id, dirty]);
+
+  async function load(canCommit: () => boolean = () => true) {
     const n = await api<{
       title: string;
+      sourcePublication?: { author: string; title: string } | null;
       bodyMarkdown: string;
       questions: Question[];
       topics?: TopicChip[];
     }>(`/notes/${id}`);
+    if (!canCommit()) return;
+    setSourcePublication(n.sourcePublication ?? null);
     setTitle(n.title);
     setBody(n.bodyMarkdown);
     setQuestions(n.questions ?? []);
@@ -153,22 +212,13 @@ function EditNote() {
   }
 
   async function runAi(payload: AiRunPayload) {
-    if (aiPending.current) return;
+    if (aiPending.current || active) return;
     aiPending.current = true;
     setAiBusy(true);
     setLastRun(payload);
     setAiError("");
     try {
-      const result = await api<{ markdown?: string }>(`/notes/${id}/ai`, {
-        method: "POST",
-        body: JSON.stringify({ ...payload, provider }),
-      });
-      if (payload.action === "generate-questions") {
-        setPreview("");
-        await refreshQuestions();
-        return;
-      }
-      setPreview(result.markdown ?? "");
+      await submit(id, { ...payload, provider });
     } catch (e) {
       setAiError(e instanceof ApiError ? e.message : "AI lỗi");
     } finally {
@@ -184,13 +234,8 @@ function EditNote() {
     router.replace("/");
   }
 
-  async function applyPreview() {
-    await api(`/notes/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ bodyMarkdown: preview }),
-    });
-    setBody(preview);
-    setPreview("");
+  async function showResult() {
+    if (displayedJob) openPreview(displayedJob);
   }
 
   return (
@@ -290,8 +335,20 @@ function EditNote() {
             aria-labelledby="ai-tab"
             hidden={rightTab !== "ai"}
           >
+            {displayedJob && (
+              <AiJobStatus
+                key={displayedJob.id}
+                job={displayedJob}
+                onResult={showResult}
+              />
+            )}
             <AiPanel
-              busy={aiBusy}
+              busy={aiBusy || !!active}
+              busyLabel={
+                active
+                  ? jobStatusLabel[active.status] + "…"
+                  : "Đang gửi yêu cầu…"
+              }
               hasUnsavedChanges={dirty}
               provider={provider}
               lastRun={lastRun}
@@ -302,26 +359,35 @@ function EditNote() {
               onQuestionLangChange={setQuestionLang}
               onDifficultyChange={setDifficulty}
               onProviderChange={setProvider}
-              preview={preview}
+              preview=""
               error={aiError}
               onRun={(payload) => void runAi(payload)}
-              onApply={() => void applyPreview()}
-              onDiscard={() => setPreview("")}
+              onApply={() => {}}
+              onDiscard={() => {}}
             />
           </section>
         </>
       }
     >
       {loading && <p role="status">Đang tải ghi chú…</p>}
+      {sourcePublication && (
+        <p className="clone-attribution">
+          Bản sao từ “{sourcePublication.title}” · {sourcePublication.author}
+        </p>
+      )}
       <NoteEditor
         disabled={loading || loadFailed}
         title={title}
         bodyMarkdown={body}
         onTitleChange={(value) => {
+          editRevision.current++;
+          latestDraft.current.dirty = true;
           setTitle(value);
           setDirty(true);
         }}
         onBodyChange={(value) => {
+          editRevision.current++;
+          latestDraft.current.dirty = true;
           setBody(value);
           setDirty(true);
         }}
@@ -342,6 +408,9 @@ function EditNote() {
           setTopics((prev) => prev.filter((t) => t.id !== tid));
         }}
       />
+      {!loading && !loadFailed && (
+        <PublicationControls key={id} noteId={id} dirty={dirty} />
+      )}
       <button
         type="button"
         className="ghost danger-action note-delete"

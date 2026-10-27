@@ -1,4 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { currentAccount } from '../accounts/account-context';
+import { DataSource, EntityManager } from 'typeorm';
+import { Topic } from '../entities/topic.entity';
+import { Injectable, Optional } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import type { AiLang, CorrectChoice } from '@kb/shared';
 import { isValidMcq } from '@kb/shared';
@@ -41,7 +44,7 @@ type DraftQuestion = {
 
 type KeepRow = { questionId: string; noteId: string; topicNames: string[] };
 
-type Draft = {
+export type ImportDraft = {
   id: string;
   createdAt: number;
   lang: AiLang;
@@ -49,7 +52,10 @@ type Draft = {
   keeps: KeepRow[];
 };
 
-type StartInput = {
+export type StartInput = {
+  model?: string;
+  expectedConnection?: string;
+  style?: string;
   owner?: string;
   source: 'cv' | 'jd';
   lang: AiLang;
@@ -94,7 +100,7 @@ function topicNamesOf(item: unknown): string[] {
 
 @Injectable()
 export class PracticeImportService {
-  private readonly drafts = new Map<string, Draft>();
+  private readonly drafts = new Map<string, ImportDraft>();
 
   constructor(
     private readonly extractor: DocumentExtractor,
@@ -103,9 +109,27 @@ export class PracticeImportService {
     private readonly topics: TopicsService,
     private readonly questions: QuestionsRepository,
     private readonly noteTopics: NoteTopicsRepository,
+    @Optional() private readonly db?: DataSource,
   ) {}
 
   async start(input: StartInput) {
+    const draft = await this.generateDraft(input);
+    await this.saveDraft(draft, input.owner);
+    return this.publicDraft(draft);
+  }
+  publicDraft(draft: ImportDraft) {
+    return { draftId: draft.id, items: draft.questions.map(toPublic) };
+  }
+  async saveDraft(draft: ImportDraft, owner?: string, manager?: EntityManager) {
+    if (this.db) {
+      if (!owner) throw AppError.unauthenticated();
+      await (manager ?? this.db.manager).query(
+        `INSERT INTO practice_import_draft(id,owner,payload,expires_at) VALUES($1,$2,$3,now()+interval '1 hour') ON CONFLICT(id) DO NOTHING`,
+        [draft.id, owner, JSON.stringify(draft)],
+      );
+    } else this.drafts.set(draft.id, draft);
+  }
+  async generateDraft(input: StartInput) {
     const text = (
       await this.extractor.extract(input.buffer, input.mime, input.filename)
     ).trim();
@@ -127,6 +151,9 @@ export class PracticeImportService {
       const extracted = await this.llm.complete({
         provider: 'chatgpt',
         owner: input.owner,
+        model: input.model,
+        expectedConnection: input.expectedConnection,
+        style: input.style,
         env: env(),
         json: true,
         temperature: 0,
@@ -141,6 +168,9 @@ export class PracticeImportService {
     const raw = await this.llm.complete({
       provider: 'chatgpt',
       owner: input.owner,
+      model: input.model,
+      expectedConnection: input.expectedConnection,
+      style: input.style,
       env: env(),
       json: true,
       temperature: 0.4,
@@ -182,19 +212,18 @@ export class PracticeImportService {
     if (parsed.length === 0)
       throw AppError.aiUpstream('No valid questions from the model');
 
-    const draft: Draft = {
+    const draft: ImportDraft = {
       id: randomUUID(),
       createdAt: Date.now(),
       lang: input.lang,
       questions: parsed,
       keeps: [],
     };
-    this.drafts.set(draft.id, draft);
-    return { draftId: draft.id, items: parsed.map(toPublic) };
+    return draft;
   }
 
-  async keep(draftId: string, body: { keeps: KeepRow[] }) {
-    const draft = this.requireDraft(draftId);
+  async keep(draftId: string, body: { keeps: KeepRow[] }, owner?: string) {
+    const draft = await this.requireDraft(draftId, owner);
     const known = new Set(draft.questions.map((q) => q.id));
     for (const row of body.keeps) {
       if (!known.has(row.questionId)) {
@@ -204,13 +233,47 @@ export class PracticeImportService {
       if (!note) throw AppError.validation('Unknown note id');
     }
     draft.keeps = body.keeps;
+    if (this.db) {
+      const rows = await this.db.query(
+        'UPDATE practice_import_draft SET payload=$3 WHERE id=$1 AND owner=$2 AND graded_result IS NULL AND expires_at>now() RETURNING id',
+        [draftId, owner, JSON.stringify(draft)],
+      );
+      if (!(Array.isArray(rows[0]) ? rows[0].length : rows.length))
+        throw AppError.conflict('Bản nháp đã được chấm hoặc hết hạn.');
+    }
   }
 
   async grade(
     draftId: string,
     body: { answers: Array<{ questionId: string; choice: string }> },
+    owner?: string,
   ) {
-    const draft = this.requireDraft(draftId);
+    const draft = await this.requireDraft(draftId, owner);
+    if (this.db) {
+      return this.db.transaction(async (manager) => {
+        const [stored] = await manager.query(
+          'SELECT * FROM practice_import_draft WHERE id=$1 AND owner=$2 AND expires_at>now() FOR UPDATE',
+          [draftId, owner],
+        );
+        if (!stored) throw AppError.notFound('Draft not found');
+        if (stored.graded_result) return stored.graded_result;
+        const result = await this.gradeDraft(stored.payload, body, manager);
+        await manager.query(
+          'UPDATE practice_import_draft SET graded_result=$2 WHERE id=$1',
+          [draftId, JSON.stringify(result)],
+        );
+        return result;
+      });
+    }
+    const result = await this.gradeDraft(draft, body);
+    this.drafts.delete(draft.id);
+    return result;
+  }
+  private async gradeDraft(
+    draft: ImportDraft,
+    body: { answers: Array<{ questionId: string; choice: string }> },
+    manager?: EntityManager,
+  ) {
     const byId = new Map(draft.questions.map((q) => [q.id, q]));
     const items = body.answers.map((answer) => {
       const row = byId.get(answer.questionId);
@@ -226,8 +289,7 @@ export class PracticeImportService {
       };
     });
 
-    await this.persistKeeps(draft);
-    this.drafts.delete(draft.id);
+    await this.persistKeeps(draft, manager);
 
     return {
       total: items.length,
@@ -236,7 +298,7 @@ export class PracticeImportService {
     };
   }
 
-  private async persistKeeps(draft: Draft) {
+  private async persistKeeps(draft: ImportDraft, manager?: EntityManager) {
     for (const keep of draft.keeps) {
       const row = draft.questions.find((q) => q.id === keep.questionId);
       if (!row) continue;
@@ -251,11 +313,38 @@ export class PracticeImportService {
       question.explanationMarkdown = row.explanationMarkdown;
       question.lang = draft.lang;
       question.source = 'ai';
-      await this.questions.save(question);
+      if (manager) {
+        const note = await this.notes.findById(keep.noteId);
+        if (!note) throw AppError.notFound('Note not found');
+        question.userId = currentAccount().id;
+        await manager.save(Question, question);
+      } else await this.questions.save(question);
 
       for (const name of keep.topicNames) {
-        const topic = await this.resolveTopic(name);
-        await this.noteTopics.add(keep.noteId, topic.id);
+        if (manager) {
+          await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+            'import-topic:' + currentAccount().id + ':' + name.toLowerCase(),
+          ]);
+          const repo = manager.getRepository(Topic);
+          let topic = await repo
+            .createQueryBuilder('t')
+            .where('lower(t.name)=lower(:name)', { name })
+            .andWhere('t.user_id=:userId', { userId: currentAccount().id })
+            .getOne();
+          if (!topic)
+            topic = await repo.save({
+              name,
+              slug: 'import-' + randomUUID(),
+              userId: currentAccount().id,
+            });
+          await manager.query(
+            'INSERT INTO note_topic(note_id,topic_id) VALUES($1,$2) ON CONFLICT DO NOTHING',
+            [keep.noteId, topic.id],
+          );
+        } else {
+          const topic = await this.resolveTopic(name);
+          await this.noteTopics.add(keep.noteId, topic.id);
+        }
       }
     }
   }
@@ -269,7 +358,17 @@ export class PracticeImportService {
     return this.topics.create({ name });
   }
 
-  private requireDraft(id: string): Draft {
+  private async requireDraft(id: string, owner?: string): Promise<ImportDraft> {
+    if (this.db) {
+      if (!owner) throw AppError.unauthenticated();
+      const [row] = await this.db.query(
+        'SELECT payload FROM practice_import_draft WHERE id=$1 AND owner=$2 AND expires_at>now()',
+        [id, owner],
+      );
+      if (!row) throw AppError.notFound('Draft not found');
+      return row.payload;
+    }
+
     const draft = this.drafts.get(id);
     if (!draft || Date.now() - draft.createdAt > HOUR_MS) {
       if (draft) this.drafts.delete(id);

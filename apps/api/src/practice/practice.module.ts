@@ -9,6 +9,7 @@ import { PracticeService } from './practice.service';
 
 @Module({
   imports: [TopicsModule, ChatgptModule],
+  exports: [PracticeImportService],
   controllers: [PracticeController],
   providers: [
     PracticeService,

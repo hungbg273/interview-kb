@@ -10,7 +10,12 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiCookieAuth, ApiTags } from '@nestjs/swagger';
-import { AddParentDto, CreateTopicDto, ListTopicsQuery, UpdateTopicDto } from './dto';
+import {
+  AddParentDto,
+  CreateTopicDto,
+  ListTopicsQuery,
+  UpdateTopicDto,
+} from './dto';
 import { TopicsService } from './topics.service';
 
 @ApiTags('topics')
@@ -22,6 +27,11 @@ export class TopicsController {
   @Get()
   list(@Query() query: ListTopicsQuery) {
     return this.topics.list(query.parentId);
+  }
+
+  @Get('catalog')
+  catalog() {
+    return this.topics.catalog();
   }
 
   @Get(':id')
