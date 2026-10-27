@@ -12,7 +12,7 @@ export class RunAiDto {
   ])
   action!: AiAction;
 
-  @IsIn(['openai', 'deepseek'])
+  @IsIn(['chatgpt', 'openai', 'deepseek'])
   provider!: AiProvider;
 
   @IsOptional()

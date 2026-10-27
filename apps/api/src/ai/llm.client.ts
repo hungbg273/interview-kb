@@ -1,5 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { VIETNAMESE_STYLE } from './prompts/vietnamese-style';
+import { Injectable, Optional } from '@nestjs/common';
 import type { AiProvider } from '@kb/shared';
+import { ChatgptClient } from '../chatgpt/chatgpt.client';
 import { AppError } from '../common/app-error';
 
 export type ProviderEnv = Record<string, string | undefined>;
@@ -21,7 +23,9 @@ export function providerConfig(provider: AiProvider, env: ProviderEnv) {
 
 @Injectable()
 export class LlmClient {
+  constructor(@Optional() private readonly chatgpt?: ChatgptClient) {}
   async complete(opts: {
+    owner?: string;
     provider: AiProvider;
     env: ProviderEnv;
     system: string;
@@ -30,6 +34,12 @@ export class LlmClient {
     maxTokens?: number;
     temperature?: number;
   }): Promise<string> {
+    const system = `${VIETNAMESE_STYLE}\n\n${opts.system}`;
+    if (opts.provider === 'chatgpt') {
+      if (!this.chatgpt)
+        throw AppError.aiNotConfigured('Kết nối ChatGPT chưa khả dụng.');
+      return this.chatgpt.complete({ ...opts, system });
+    }
     const cfg = providerConfig(opts.provider, opts.env);
     if (!cfg.apiKey) {
       throw AppError.aiNotConfigured();
@@ -39,24 +49,27 @@ export class LlmClient {
     const timer = setTimeout(() => ctrl.abort(), 30_000);
 
     try {
-      const res = await fetch(`${cfg.baseUrl.replace(/\/$/, '')}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${cfg.apiKey}`,
-          'Content-Type': 'application/json',
+      const res = await fetch(
+        `${cfg.baseUrl.replace(/\/$/, '')}/chat/completions`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${cfg.apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: cfg.model,
+            messages: [
+              { role: 'system', content: system },
+              { role: 'user', content: opts.user },
+            ],
+            temperature: opts.temperature ?? 0.3,
+            ...(opts.maxTokens ? { max_tokens: opts.maxTokens } : {}),
+            ...(opts.json ? { response_format: { type: 'json_object' } } : {}),
+          }),
+          signal: ctrl.signal,
         },
-        body: JSON.stringify({
-          model: cfg.model,
-          messages: [
-            { role: 'system', content: opts.system },
-            { role: 'user', content: opts.user },
-          ],
-          temperature: opts.temperature ?? 0.3,
-          ...(opts.maxTokens ? { max_tokens: opts.maxTokens } : {}),
-          ...(opts.json ? { response_format: { type: 'json_object' } } : {}),
-        }),
-        signal: ctrl.signal,
-      });
+      );
 
       if (!res.ok) {
         throw AppError.aiUpstream();

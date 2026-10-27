@@ -1,6 +1,6 @@
 'use client';
 
-import { AuthGate } from '@/components/AuthGate';
+import { ChatgptConnectionPanel } from '@/components/ChatgptConnectionPanel';
 import { api, ApiError } from '@/lib/api';
 import { AiLang } from '@kb/shared';
 import { useEffect, useState } from 'react';
@@ -311,6 +311,7 @@ function Practice() {
         <section className="sheet">
           <h1>Luyện tập</h1>
           <p className="kicker">Chọn ghi chú, chủ đề, hoặc tải CV/JD — có thể mix.</p>
+          {(useCv || useJd) && <ChatgptConnectionPanel />}
           <div className="search-field">
             <input
               value={q}
@@ -530,7 +531,7 @@ function Practice() {
           <p className="kicker">
             Câu {index + 1} / {items.length}
           </p>
-          <h1>{current.prompt}</h1>
+          <h1 className="practice-question">{current.prompt}</h1>
           <div className="quiz-choices">
             {letters.map((letter) => {
               const text = {
@@ -590,8 +591,8 @@ function Practice() {
 
 export default function PracticePage() {
   return (
-    <AuthGate>
+    <>
       <Practice />
-    </AuthGate>
+    </>
   );
 }

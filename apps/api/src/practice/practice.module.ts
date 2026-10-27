@@ -1,3 +1,4 @@
+import { ChatgptModule } from '../chatgpt/chatgpt.module';
 import { Module } from '@nestjs/common';
 import { LlmClient } from '../ai/llm.client';
 import { TopicsModule } from '../topics/topics.module';
@@ -7,8 +8,13 @@ import { PracticeImportService } from './practice-import.service';
 import { PracticeService } from './practice.service';
 
 @Module({
-  imports: [TopicsModule],
+  imports: [TopicsModule, ChatgptModule],
   controllers: [PracticeController],
-  providers: [PracticeService, PracticeImportService, DocumentExtractor, LlmClient],
+  providers: [
+    PracticeService,
+    PracticeImportService,
+    DocumentExtractor,
+    LlmClient,
+  ],
 })
 export class PracticeModule {}

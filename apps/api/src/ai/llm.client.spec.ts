@@ -123,3 +123,28 @@ describe('LlmClient', () => {
   });
 });
 
+
+describe('shared Vietnamese writing instructions', () => {
+  const originalFetch = global.fetch;
+  afterEach(() => { global.fetch = originalFetch; });
+  it('includes compact style on every ChatGPT call without modifying task or user input', async () => {
+    const complete = jest.fn().mockResolvedValue('result');
+    const client = new LlmClient({ complete } as never);
+    for (let i=0; i<2; i++) await client.complete({provider:'chatgpt',env:{},system:'Return JSON. Language: English.',user:'My note',json:true,owner:'person@example.com'});
+    for(const [request] of complete.mock.calls){
+      expect(request.system).toContain('Khi viết tiếng Việt');
+      expect(request.system).toContain('Giữ nguyên ngôn ngữ được yêu cầu');
+      expect(request.system).toContain('Return JSON. Language: English.');
+      expect(request.system.match(/Khi viết tiếng Việt/g)).toHaveLength(1);
+      expect(request.user).toBe('My note');expect(request.json).toBe(true);expect(request.owner).toBe('person@example.com');
+    }
+  });
+  it.each(['openai','deepseek'] as const)('includes the same style in %s system instructions',async provider=>{
+    global.fetch=jest.fn().mockResolvedValue({ok:true,json:async()=>({choices:[{message:{content:'result'}}]})});
+    await new LlmClient().complete({provider,env:{OPENAI_API_KEY:'test',DEEPSEEK_API_KEY:'test'},system:'Translate into English. Keep structure.',user:'Source'});
+    const body=JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+    expect(body.messages[0].content).toContain('Khi viết tiếng Việt');
+    expect(body.messages[0].content).toContain('Translate into English. Keep structure.');
+    expect(body.messages[1]).toEqual({role:'user',content:'Source'});
+  });
+});

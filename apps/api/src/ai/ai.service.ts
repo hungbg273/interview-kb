@@ -7,7 +7,12 @@ import { Note } from '../entities/note.entity';
 import { Question } from '../entities/question.entity';
 import { RunAiDto } from './dto';
 import { LlmClient, type ProviderEnv } from './llm.client';
-import { NOTE_CONTEXT_CHARS, STEM_LIMIT, clipText, parseLlmJsonArray } from './llm-json';
+import {
+  NOTE_CONTEXT_CHARS,
+  STEM_LIMIT,
+  clipText,
+  parseLlmJsonArray,
+} from './llm-json';
 
 const LANG: Record<AiLang, string> = {
   en: 'English',
@@ -43,14 +48,21 @@ export class AiService {
     private readonly llm: LlmClient,
   ) {}
 
-  async run(noteId: string, dto: RunAiDto) {
-    const note = await this.notes.findById(noteId, ['noteTopics', 'noteTopics.topic']);
+  async run(noteId: string, dto: RunAiDto, owner?: string) {
+    const note = await this.notes.findById(noteId, [
+      'noteTopics',
+      'noteTopics.topic',
+    ]);
     if (!note) throw AppError.notFound('Note not found');
 
     const env = providerEnv();
     const body = noteContext(note);
 
-    if (dto.action === 'summarize' || dto.action === 'expand' || dto.action === 'generate-content') {
+    if (
+      dto.action === 'summarize' ||
+      dto.action === 'expand' ||
+      dto.action === 'generate-content'
+    ) {
       const system =
         dto.action === 'summarize'
           ? 'Summarize the note in the same language. Plain language. Do not invent facts.'
@@ -59,6 +71,7 @@ export class AiService {
             : 'Write a complete interview study note from the title and any draft. Match the title language. Short headings are ok. Do not invent APIs or fake RFCs.';
       const markdown = await this.llm.complete({
         provider: dto.provider,
+        owner,
         env,
         system,
         user: body,
@@ -72,6 +85,7 @@ export class AiService {
       const lang = this.requireLang(dto.targetLang);
       const markdown = await this.llm.complete({
         provider: dto.provider,
+        owner,
         env,
         system: `Translate the note into ${LANG[lang]}. Keep structure. Do not add new facts.`,
         user: body,
@@ -93,13 +107,16 @@ export class AiService {
     const user = [
       body,
       topics.length ? `Topics: ${topics.join(', ')}` : '',
-      stems.length ? `Existing questions:\n${stems.map((stem) => `- ${stem}`).join('\n')}` : '',
+      stems.length
+        ? `Existing questions:\n${stems.map((stem) => `- ${stem}`).join('\n')}`
+        : '',
     ]
       .filter(Boolean)
       .join('\n\n');
 
     const raw = await this.llm.complete({
       provider: dto.provider,
+      owner,
       env,
       json: true,
       temperature: 0.4,

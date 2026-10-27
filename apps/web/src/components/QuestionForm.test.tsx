@@ -19,6 +19,9 @@ test('has A-D radios', () => {
       onSubmit={() => {}}
     />,
   );
+  expect(screen.getByLabelText('Câu hỏi')).toBeTruthy();
+  expect(screen.getByLabelText('Giải thích (tuỳ chọn)')).toBeTruthy();
+  expect(screen.getByRole('group', { name: 'Các đáp án' })).toBeTruthy();
   expect(screen.getByLabelText('A')).toBeTruthy();
   expect(screen.getByLabelText('D')).toBeTruthy();
 });

@@ -1,4 +1,4 @@
-import { Body, Controller, Param, Post } from '@nestjs/common';
+import { Body, Controller, Param, Post, Req } from '@nestjs/common';
 import { ApiCookieAuth, ApiTags } from '@nestjs/swagger';
 import { AiService } from './ai.service';
 import { RunAiDto } from './dto';
@@ -10,7 +10,11 @@ export class AiController {
   constructor(private readonly ai: AiService) {}
 
   @Post(':id/ai')
-  run(@Param('id') id: string, @Body() dto: RunAiDto) {
-    return this.ai.run(id, dto);
+  run(
+    @Param('id') id: string,
+    @Body() dto: RunAiDto,
+    @Req() req: { user: { email: string } },
+  ) {
+    return this.ai.run(id, dto, req.user.email);
   }
 }

@@ -9,6 +9,8 @@ vi.mock('next/navigation', () => ({
 }));
 
 import { AuthGate } from './AuthGate';
+import { WorkspaceNavigationProvider, useUnsavedChanges } from './WorkspaceNavigation';
+function UnsavedNote() {useUnsavedChanges(true);return <p>Unsaved note</p>;}
 
 afterEach(() => {
   cleanup();
@@ -64,6 +66,30 @@ describe('AuthGate', () => {
     expect(screen.getByRole('link', { name: 'Ghi chú' })).toHaveAttribute('href', '/');
     expect(screen.getByRole('link', { name: 'Luyện tập' })).toHaveAttribute('href', '/practice');
     expect(screen.queryByRole('link', { name: 'Chủ đề' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the authenticated shell mounted when page content changes', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {email:'you@example.com'}));
+    vi.stubGlobal('fetch',fetchMock);
+    const {rerender}=render(<AuthGate><p>First note</p></AuthGate>);
+    await screen.findByText('you@example.com');
+    const shell=screen.getByRole('navigation',{name:'Điều hướng chính'});
+    rerender(<AuthGate><p>Second note</p></AuthGate>);
+    expect(screen.getByRole('navigation',{name:'Điều hướng chính'})).toBe(shell);
+    expect(screen.getByText('Second note')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('confirms before logging out with unsaved changes', async () => {
+    const fetchMock=vi.fn().mockResolvedValue(jsonResponse(200,{email:'you@example.com'}));
+    vi.stubGlobal('fetch',fetchMock);
+    const confirm=vi.spyOn(window,'confirm').mockReturnValue(false);
+    render(<WorkspaceNavigationProvider><AuthGate><UnsavedNote/></AuthGate></WorkspaceNavigationProvider>);
+    await screen.findByText('Unsaved note');
+    fireEvent.click(screen.getByRole('button',{name:'Đăng xuất'}));
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(replace).not.toHaveBeenCalled();
   });
 
   it('logs out then returns to login', async () => {

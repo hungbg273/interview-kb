@@ -1,5 +1,7 @@
 import { Be_Vietnam_Pro, Source_Serif_4 } from 'next/font/google';
+import { AppWorkspace } from '@/components/AppWorkspace';
 import './globals.css';
+import './workspace.css';
 
 const sans = Be_Vietnam_Pro({
   subsets: ['latin', 'vietnamese'],
@@ -21,7 +23,7 @@ export const metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="vi">
-      <body className={`${sans.variable} ${display.variable}`}>{children}</body>
+      <body className={`${sans.variable} ${display.variable}`}><AppWorkspace>{children}</AppWorkspace></body>
     </html>
   );
 }

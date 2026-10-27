@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const { push } = vi.hoisted(() => ({ push: vi.fn() }));
@@ -45,12 +45,12 @@ describe('HomePage explorer', () => {
 
     render(<HomePage />);
 
-    expect(await screen.findByRole('button', { name: 'Chưa gán chủ đề' })).toBeInTheDocument();
-    expect(screen.getByText('Networking')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Mở ghi chú chưa gán chủ đề' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Mở chủ đề Networking' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Networking' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mở chủ đề Networking' }));
 
-    expect(await screen.findByText('TCP')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Mở chủ đề TCP' })).toBeInTheDocument();
     expect(await screen.findByText('OSI vs TCP/IP')).toBeInTheDocument();
 
     expect(await screen.findByRole('button', { name: 'Thêm chủ đề con' })).toBeInTheDocument();
@@ -59,6 +59,47 @@ describe('HomePage explorer', () => {
     expect(
       screen.queryByRole('button', { name: 'Chọn / xem ghi chú' }),
     ).not.toBeInTheDocument();
+  });
+
+  it('collapses the topic sidebar and navigates through its tree', async () => {
+    api.mockImplementation(async (path: string) => {
+      if (path === '/topics') return [{ id: 'net', name: 'Networking' }];
+      if (path === '/topics?parentId=net') return [];
+      return { items: [] };
+    });
+    render(<HomePage />);
+    const tree = await screen.findByRole('navigation', { name: 'Cây chủ đề' });
+    fireEvent.click(screen.getByRole('button', { name: 'Ẩn cây chủ đề' }));
+    expect(tree).not.toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Hiện cây chủ đề' }));
+    expect(tree).toBeVisible();
+    fireEvent.click(await screen.findByRole('button', { name: 'Mở chủ đề Networking' }));
+    expect(await screen.findByRole('button', { name: 'Thêm chủ đề con' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Ẩn thông tin chủ đề' }));
+    expect(screen.queryByRole('button', { name: 'Thêm chủ đề con' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Hiện thông tin chủ đề' }));
+    expect(screen.getByRole('button', { name: 'Thêm chủ đề con' })).toBeVisible();
+  });
+
+  it('shows note content in the center and only the selected topic and children in the right graph', async () => {
+    api.mockImplementation(async (path: string) => {
+      if (path === '/topics') return [{id:'net',name:'Networking'},{id:'other',name:'Other'}];
+      if (path === '/topics?parentId=net') return [{id:'tcp',name:'TCP'}];
+      if (path === '/topics?parentId=tcp') return [];
+      if (path === '/notes?topicId=net') return {items:[{id:'n1',title:'OSI vs TCP/IP',bodyMarkdown:'## Transport layer\nReliable delivery.'}]};
+      return {items:[]};
+    });
+    render(<HomePage />);
+    fireEvent.click(await screen.findByRole('button', {name:'Mở chủ đề Networking'}));
+    const content = screen.getByRole('region', {name:'Nội dung chủ đề'});
+    expect(await within(content).findByText('Reliable delivery.')).toBeInTheDocument();
+    const graph = screen.getByRole('region', {name:'Đồ thị cục bộ'});
+    expect(await within(graph).findByRole('button', {name:'TCP'})).toBeInTheDocument();
+    expect(within(graph).getByRole('button', {name:'Networking'})).toBeInTheDocument();
+    expect(within(graph).queryByRole('button', {name:'Other'})).not.toBeInTheDocument();
+    fireEvent.click(within(graph).getByRole('button', {name:'TCP'}));
+    await waitFor(() => expect(api).toHaveBeenCalledWith('/notes?topicId=tcp'));
+    expect(within(content).queryByText('Reliable delivery.')).not.toBeInTheDocument();
   });
 
   it('deletes a note from the panel', async () => {
@@ -80,7 +121,7 @@ describe('HomePage explorer', () => {
     });
 
     render(<HomePage />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Networking' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Mở chủ đề Networking' }));
     expect(await screen.findByText('OSI vs TCP/IP')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Xóa OSI vs TCP/IP' }));
@@ -94,7 +135,7 @@ describe('HomePage explorer', () => {
     confirm.mockRestore();
   });
 
-  it('search keeps only matching graph nodes and lists notes', async () => {
+  it('search filters the topic tree and lists notes', async () => {
     api.mockImplementation(async (path: string) => {
       if (path === '/topics') return [{ id: 'net', name: 'Networking' }];
       if (path.startsWith('/notes?uncategorized')) return { items: [] };
@@ -111,8 +152,8 @@ describe('HomePage explorer', () => {
     });
 
     render(<HomePage />);
-    expect(await screen.findByRole('button', { name: 'Networking' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Chưa gán chủ đề' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Mở chủ đề Networking' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Mở ghi chú chưa gán chủ đề' })).toBeInTheDocument();
 
     fireEvent.change(screen.getByPlaceholderText('Tìm chủ đề hoặc tiêu đề ghi chú'), {
       target: { value: 'TCP' },
@@ -121,16 +162,14 @@ describe('HomePage explorer', () => {
     await waitFor(() => {
       expect(api).toHaveBeenCalledWith('/search?q=TCP');
     });
-    expect(await screen.findByRole('button', { name: 'TCP' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Networking' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Chưa gán chủ đề' })).not.toBeInTheDocument();
-    expect(screen.getByText('Ghi chú')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Mở chủ đề TCP' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Mở chủ đề Networking' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'TCP handshake' })).toHaveAttribute(
       'href',
       '/notes/n1',
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'TCP' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mở chủ đề TCP' }));
     await waitFor(() => {
       expect(screen.queryByRole('link', { name: 'TCP handshake' })).not.toBeInTheDocument();
     });

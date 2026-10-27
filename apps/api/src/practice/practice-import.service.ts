@@ -50,6 +50,7 @@ type Draft = {
 };
 
 type StartInput = {
+  owner?: string;
   source: 'cv' | 'jd';
   lang: AiLang;
   level: ImportLevel;
@@ -85,7 +86,10 @@ function topicNamesOf(item: unknown): string[] {
   if (!item || typeof item !== 'object') return [];
   const raw = (item as { suggestedTopics?: unknown }).suggestedTopics;
   if (!Array.isArray(raw)) return [];
-  return raw.filter((name): name is string => typeof name === 'string' && name.trim().length > 0);
+  return raw.filter(
+    (name): name is string =>
+      typeof name === 'string' && name.trim().length > 0,
+  );
 }
 
 @Injectable()
@@ -102,7 +106,9 @@ export class PracticeImportService {
   ) {}
 
   async start(input: StartInput) {
-    const text = (await this.extractor.extract(input.buffer, input.mime, input.filename)).trim();
+    const text = (
+      await this.extractor.extract(input.buffer, input.mime, input.filename)
+    ).trim();
     if (!text) throw AppError.validation('Could not read text from the file');
 
     const catalog = await this.topics.listNames();
@@ -119,7 +125,8 @@ export class PracticeImportService {
     let sourceBlock = `${input.source.toUpperCase()}: ${input.filename}\n${catalogLine}\n\n${clipped}`;
     if (text.length > LONG_DOC_CHARS) {
       const extracted = await this.llm.complete({
-        provider: 'openai',
+        provider: 'chatgpt',
+        owner: input.owner,
         env: env(),
         json: true,
         temperature: 0,
@@ -132,7 +139,8 @@ export class PracticeImportService {
     }
 
     const raw = await this.llm.complete({
-      provider: 'openai',
+      provider: 'chatgpt',
+      owner: input.owner,
       env: env(),
       json: true,
       temperature: 0.4,
@@ -142,11 +150,15 @@ export class PracticeImportService {
     });
 
     const parsed = parseLlmJsonArray(raw)
-      .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
+      .filter(
+        (item): item is Record<string, unknown> =>
+          !!item && typeof item === 'object',
+      )
       .filter((item) => isValidMcq(item as never))
       .slice(0, 8)
       .map((item) => {
-        const id = typeof item.id === 'string' && item.id ? item.id : randomUUID();
+        const id =
+          typeof item.id === 'string' && item.id ? item.id : randomUUID();
         return {
           id,
           prompt: String(item.prompt).trim(),
@@ -160,12 +172,15 @@ export class PracticeImportService {
               ? item.explanationMarkdown.trim()
               : null,
           suggestedTopics: topicNamesOf(item).filter((name) =>
-            catalog.some((itemName) => itemName.toLowerCase() === name.toLowerCase()),
+            catalog.some(
+              (itemName) => itemName.toLowerCase() === name.toLowerCase(),
+            ),
           ),
         } satisfies DraftQuestion;
       });
 
-    if (parsed.length === 0) throw AppError.aiUpstream('No valid questions from the model');
+    if (parsed.length === 0)
+      throw AppError.aiUpstream('No valid questions from the model');
 
     const draft: Draft = {
       id: randomUUID(),
@@ -191,7 +206,10 @@ export class PracticeImportService {
     draft.keeps = body.keeps;
   }
 
-  async grade(draftId: string, body: { answers: Array<{ questionId: string; choice: string }> }) {
+  async grade(
+    draftId: string,
+    body: { answers: Array<{ questionId: string; choice: string }> },
+  ) {
     const draft = this.requireDraft(draftId);
     const byId = new Map(draft.questions.map((q) => [q.id, q]));
     const items = body.answers.map((answer) => {
@@ -244,7 +262,9 @@ export class PracticeImportService {
 
   private async resolveTopic(name: string) {
     const hits = await this.topics.searchByName(name);
-    const exact = hits.find((topic) => topic.name.toLowerCase() === name.toLowerCase());
+    const exact = hits.find(
+      (topic) => topic.name.toLowerCase() === name.toLowerCase(),
+    );
     if (exact) return exact;
     return this.topics.create({ name });
   }

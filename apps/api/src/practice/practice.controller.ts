@@ -7,6 +7,7 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
@@ -51,9 +52,10 @@ export class PracticeController {
       limits: { fileSize: 5 * 1024 * 1024 },
     }),
   )
-  startImport(@UploadedFile() file: { originalname: string; mimetype: string; buffer: Buffer } | undefined, @Body() body: StartImportDto) {
+  startImport(@UploadedFile() file: { originalname: string; mimetype: string; buffer: Buffer } | undefined, @Body() body: StartImportDto, @Req() req: {user:{email:string}}) {
     if (!file) throw AppError.validation('Upload a PDF or DOCX file');
     return this.imports.start({
+      owner: req.user.email,
       source: body.source,
       lang: body.lang,
       level: body.level,

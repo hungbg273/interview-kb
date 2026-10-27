@@ -1,6 +1,6 @@
 export type CorrectChoice = 'A' | 'B' | 'C' | 'D';
 export type QuestionSource = 'manual' | 'ai';
-export type AiProvider = 'openai' | 'deepseek';
+export type AiProvider = 'chatgpt' | 'openai' | 'deepseek';
 export type AiAction =
   | 'summarize'
   | 'expand'
