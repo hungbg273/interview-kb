@@ -1,0 +1,105 @@
+{
+  "apiVersion": "v1",
+  "name": "interview-kb",
+  "description": "Interview Knowledge Base — web + api + Postgres (Redis via external Upstash).",
+  "project": {
+    "spec": {
+      "name": "interview-kb",
+      "region": "europe-west",
+      "color": "#6d5df6"
+    }
+  },
+  "spec": {
+    "spec": {
+      "services": [
+        {
+          "kind": "DeploymentService",
+          "spec": {
+            "name": "api",
+            "deployment": {
+              "instances": 1
+            },
+            "vcpu": 0.5,
+            "memory": 1024,
+            "ports": [
+              {
+                "name": "http",
+                "internalPort": 4000,
+                "public": true,
+                "protocol": "HTTP"
+              }
+            ],
+            "buildConfiguration": {
+              "pathIgnoreRules": []
+            },
+            "build": {
+              "vcs": {
+                "projectUrl": "https://github.com/OWNER/REPO",
+                "projectType": "github"
+              },
+              "buildConfiguration": {
+                "dockerFilePath": "/apps/api/Dockerfile.prod",
+                "dockerWorkDir": "/"
+              }
+            },
+            "runtimeEnvironment": {
+              "NODE_ENV": "production",
+              "PORT": "4000"
+            }
+          }
+        },
+        {
+          "kind": "DeploymentService",
+          "spec": {
+            "name": "web",
+            "deployment": {
+              "instances": 1
+            },
+            "vcpu": 0.5,
+            "memory": 1024,
+            "ports": [
+              {
+                "name": "http",
+                "internalPort": 3000,
+                "public": true,
+                "protocol": "HTTP"
+              }
+            ],
+            "build": {
+              "vcs": {
+                "projectUrl": "https://github.com/OWNER/REPO",
+                "projectType": "github"
+              },
+              "buildConfiguration": {
+                "dockerFilePath": "/apps/web/Dockerfile.prod",
+                "dockerWorkDir": "/",
+                "buildArguments": {
+                  "NEXT_PUBLIC_API_URL": "https://REPLACE-with-api-public-url"
+                }
+              }
+            },
+            "runtimeEnvironment": {
+              "NODE_ENV": "production",
+              "PORT": "3000"
+            }
+          }
+        }
+      ],
+      "addons": [
+        {
+          "kind": "Addon",
+          "spec": {
+            "name": "postgres",
+            "type": "postgres",
+            "version": "16",
+            "billing": {
+              "deploymentPlan": "nf-compute-50",
+              "storage": 4096,
+              "replicas": 1
+            }
+          }
+        }
+      ]
+    }
+  }
+}
