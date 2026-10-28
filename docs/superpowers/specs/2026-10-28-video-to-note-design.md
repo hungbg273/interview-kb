@@ -57,13 +57,27 @@ User pastes link (web)
 
 **New**
 
-- `TranscriptClient` (backend, in a `video/` area or alongside `ai/`).
-  - Input: `videoUrl`. Output: `{ platform: 'youtube'|'tiktok'|'facebook', title, text }`.
+- `TranscriptClient` (backend, in a `video/` area or alongside `ai/`). **Vendor: Supadata.**
+  - Input: `videoUrl`. Output: `{ platform: 'youtube'|'tiktok'|'facebook', text }`.
   - Detects platform from URL host; rejects others with `AppError.validation`.
-  - Calls the transcript vendor via `fetch` with an `AbortController` timeout (~60s).
+  - Calls `GET {TRANSCRIPT_API_URL}/transcript?url=<encoded>&text=true&mode=auto` with
+    header `x-api-key: TRANSCRIPT_API_KEY`, using an `AbortController` timeout.
+  - **Handles Supadata async jobs:** a response may be `200 { content, lang }` (done) or
+    `202 { jobId }`. On 202, poll `GET {TRANSCRIPT_API_URL}/transcript/{jobId}` (~1s
+    interval, bounded max wait, e.g. 120s) until `status` is `completed` (use `content`) or
+    `failed` (→ `AppError.aiUpstream`). Because this runs inside the BullMQ worker, polling
+    does not block any user HTTP request.
+  - Error mapping: `403`/`404` → permanent `AppError.validation` ("video private/not
+    found"); empty `content` (`""`/`[]`) or `206` → permanent "no transcript"; `5xx`/
+    timeout/network → retryable `AppError.aiUpstream`.
   - Strips `\u0000`; clips `text` to `MAX_DOCUMENT_CHARS` (30000).
-  - Config: `TRANSCRIPT_API_URL`, `TRANSCRIPT_API_KEY`. Missing key →
-    `AppError.aiNotConfigured`.
+  - Supadata also covers Instagram and X, but this feature only exposes YouTube/TikTok/
+    Facebook; other hosts are rejected client- and server-side.
+  - Config: `TRANSCRIPT_API_URL` (default `https://api.supadata.ai/v1`), `TRANSCRIPT_API_KEY`.
+    Missing key → `AppError.aiNotConfigured`.
+  - Title: Supadata's transcript endpoint does not return a video title, so the note title
+    is derived (e.g. platform + short label) or the user edits it; `result.title` is
+    best-effort.
 - `POST /ai-jobs/video` endpoint + `VideoJobDto { videoUrl }` (class-validator `@IsUrl`),
   modeled on `POST /practice/import-jobs` but JSON instead of multipart. Requires a UUID
   `Idempotency-Key` header; inherits the 3-active-jobs-per-owner limit.
