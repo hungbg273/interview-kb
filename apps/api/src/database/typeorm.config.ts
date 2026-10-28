@@ -1,3 +1,4 @@
+import { Interviews1760000000009 } from '../migrations/1760000000009-Interviews';
 import { PersonalLibraries1760000000008 } from '../migrations/1760000000008-PersonalLibraries';
 import { ImportJobs1760000000007 } from '../migrations/1760000000007-ImportJobs';
 import { AiJobs1760000000006 } from '../migrations/1760000000006-AiJobs';
@@ -25,6 +26,7 @@ export const migrations = [
   AiJobs1760000000006,
   ImportJobs1760000000007,
   PersonalLibraries1760000000008,
+  Interviews1760000000009,
 ];
 
 export function typeormOptions(): DataSourceOptions {

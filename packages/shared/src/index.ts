@@ -86,3 +86,7 @@ export type AiJobView = {
   error: {code: string; message: string} | null;
 };
 export type AiJobResult = {markdown?: string; questionIds?: string[]; sourceHash: string;draftId?:string;items?:Array<{id:string;prompt:string;choiceA:string;choiceB:string;choiceC:string;choiceD:string;suggestedTopics:string[]}>};
+export type * from './interview';
+// OpenAI's documented quality recommendations; do not fill the list with less
+// preferred options simply to reach a quota of voices.
+export const OPENAI_INTERVIEW_VOICES = ['marin', 'cedar'] as const;

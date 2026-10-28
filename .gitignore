@@ -2,6 +2,7 @@
 node_modules/
 dist/
 .next/
+.next-dev/
 coverage/
 .env
 .env.local
@@ -20,3 +21,9 @@ apps/web/public/vendor/mermaid/
 .local-backups/
 !docs/superpowers/plans/2026-10-27-personal-libraries.md
 !docs/personal-libraries.md
+!docs/mock-interviews.md
+!docs/voice-quality.md
+!docs/superpowers/specs/2026-10-28-mock-interview-providers-design.md
+!docs/superpowers/plans/2026-10-28-mock-interview-providers.md
+!docs/superpowers/plans/2026-10-28-interview-voices.md
+!docs/superpowers/plans/2026-10-28-optional-interview-context.md

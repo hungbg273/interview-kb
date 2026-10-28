@@ -7,6 +7,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import type { PinoLogger } from 'nestjs-pino';
 import { AppErrorFilter } from './app-error.filter';
 
 function mockHost(json: jest.Mock) {
@@ -22,7 +23,13 @@ function mockHost(json: jest.Mock) {
 }
 
 describe('AppErrorFilter', () => {
-  const filter = new AppErrorFilter();
+  const logger = {
+    setContext: jest.fn(),
+    error: jest.fn(),
+  } as unknown as PinoLogger;
+  const filter = new AppErrorFilter(logger);
+
+  beforeEach(() => jest.clearAllMocks());
 
   it.each([
     [new UnauthorizedException(), 'UNAUTHENTICATED', HttpStatus.UNAUTHORIZED],
@@ -39,15 +46,23 @@ describe('AppErrorFilter', () => {
       error: { code, message: expect.any(String) },
     });
     expect(json.mock.calls[0][0].error.message.length).toBeGreaterThan(0);
+    // HTTP exceptions are expected; they must not be logged as unhandled.
+    expect(logger.error).not.toHaveBeenCalled();
   });
 
-  it('does not leak stack for unknown errors', () => {
+  it('does not leak stack for unknown errors but logs them', () => {
     const json = jest.fn();
     const { status, host } = mockHost(json);
-    filter.catch(new Error('secret-key-abc'), host);
+    const unknown = new Error('secret-key-abc');
+    filter.catch(unknown, host);
     expect(status).toHaveBeenCalledWith(HttpStatus.INTERNAL_SERVER_ERROR);
     expect(json).toHaveBeenCalledWith({
       error: { code: 'INTERNAL', message: 'Internal server error' },
     });
+    // The real error is logged server-side (structured) for Grafana.
+    expect(logger.error).toHaveBeenCalledWith(
+      { err: unknown },
+      'Unhandled exception',
+    );
   });
 });

@@ -256,7 +256,7 @@ export function SubjectExplorer() {
         {notes.map(note => <TopicNoteContent key={note.id} note={note} onDirtyChange={markDirty} onSaved={async()=>{await reloadNotes();await refreshSharedNotes();}} onDelete={()=>void removeNote(note.id,note.title)} />)}
       </section>
       <aside id="topic-details" className="graph-panel" hidden={!rightOpen}>
-        <LocalTopicGraph topic={selected === UNCATEGORIZED ? null : {id:selected,name:selectedName}} children={children[selected] ?? []} onSelect={topic=>{if (topic.id !== selected) void toggle(topic);}} />
+        <LocalTopicGraph topic={selected === UNCATEGORIZED ? null : {id:selected,name:selectedName}} onSelect={topic=>{if (topic.id !== selected) void toggle(topic);}}>{children[selected] ?? []}</LocalTopicGraph>
         <div className="sidebar-heading"><WorkspaceIcon name="folder" /><span>Thông tin chủ đề</span></div>
         <h2>{selectedName}</h2>
         <p className="lede">

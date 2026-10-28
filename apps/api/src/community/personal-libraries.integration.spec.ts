@@ -1,3 +1,4 @@
+import { PersonalLibraries1760000000008 } from '../migrations/1760000000008-PersonalLibraries';
 import { Test } from '@nestjs/testing';
 import { ValidationPipe, INestApplication } from '@nestjs/common';
 import request from 'supertest';
@@ -68,7 +69,7 @@ integration('Personal libraries and community with PostgreSQL', () => {
     db = new DataSource({
       ...typeormOptions(),
       url: url.href,
-      migrations: migrations.slice(0, -1),
+      migrations: migrations.slice(0, migrations.indexOf(PersonalLibraries1760000000008)),
     } as never);
     await db.initialize();
     await db.runMigrations();

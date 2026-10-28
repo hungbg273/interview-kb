@@ -52,11 +52,15 @@ services:
     env_file: .env
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:4000
+      # Colima bind mounts do not reliably forward host filesystem events.
+      WATCHPACK_POLLING: "true"
     ports:
       - "3000:3000"
     volumes:
       - ./apps/web:/repo/apps/web
       - ./packages/shared:/repo/packages/shared
+      # Keep Linux development manifests separate from host builds and dev servers.
+      - web-next-dev:/repo/apps/web/.next-dev
     depends_on:
       - api
 
@@ -104,6 +108,7 @@ services:
         condition: service_healthy
 
 volumes:
+  web-next-dev:
   redis-data:
   chatgpt-credentials:
   pgdata:

@@ -85,6 +85,7 @@ describe("AuthGate", () => {
       "href",
       "/practice",
     );
+    expect(screen.getByRole('link', { name: 'Phỏng vấn thử' })).toHaveAttribute('href', '/interview');
     expect(
       screen.queryByRole("link", { name: "Chủ đề" }),
     ).not.toBeInTheDocument();

@@ -15,7 +15,7 @@ import { NoteEditor } from "@/components/NoteEditor";
 
 type TopicChip = { id: string; name: string };
 
-export function NewNote() {
+function NewNote() {
   const router = useRouter();
   const params = useSearchParams();
   const createdId = useRef<string | null>(null);

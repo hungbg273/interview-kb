@@ -6,11 +6,16 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { Response } from 'express';
+import { PinoLogger } from 'nestjs-pino';
 import { ERROR_CODES } from '@kb/shared';
 import { AppError } from './app-error';
 
 @Catch()
 export class AppErrorFilter implements ExceptionFilter {
+  constructor(private readonly logger: PinoLogger) {
+    this.logger.setContext(AppErrorFilter.name);
+  }
+
   catch(exception: unknown, host: ArgumentsHost) {
     const res = host.switchToHttp().getResponse<Response>();
 
@@ -43,6 +48,9 @@ export class AppErrorFilter implements ExceptionFilter {
       return res.status(status).json({ error: { code, message } });
     }
 
+    // Unhandled, non-HTTP exception. Log the full error (pino serializes the
+    // stack into an `err` field) before returning the opaque 500 to the client.
+    this.logger.error({ err: exception }, 'Unhandled exception');
     return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       error: { code: 'INTERNAL', message: 'Internal server error' },
     });

@@ -121,6 +121,9 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         >
           Cộng đồng
         </WorkspaceLink>
+        <WorkspaceLink href="/interview" className={path.startsWith('/interview') ? 'active' : undefined}>
+          Phỏng vấn thử
+        </WorkspaceLink>
         <span className="who">{email}</span>
         <span className="session-dot" title="Đã đăng nhập" />
       </header>
