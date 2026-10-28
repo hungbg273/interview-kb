@@ -22,6 +22,8 @@ import { LlmClient, type ProviderEnv } from './llm.client';
 import {
   NOTE_CONTEXT_CHARS,
   STEM_LIMIT,
+  DOC_CONTEXT_CHARS,
+  LONG_DOC_CHARS,
   clipText,
   parseLlmJsonArray,
 } from './llm-json';
@@ -78,6 +80,47 @@ export class AiService {
 
   async generate(request: AiPreparedRequest, owner: string) {
     return this.llm.complete({ ...request, owner, env: providerEnv() });
+  }
+
+  /**
+   * Summarize a video transcript into a structured Markdown study note.
+   * Long transcripts are condensed in a first pass to stay within token limits.
+   */
+  async summarizeVideo(
+    transcript: string,
+    opts: { provider: import('@kb/shared').AiProvider; lang: AiLang; owner?: string },
+  ): Promise<string> {
+    const env = providerEnv();
+    let source = transcript.trim();
+    if (!source) throw AppError.validation('Transcript rỗng.');
+
+    // Two-pass: condense very long transcripts into key facts first.
+    if (source.length > LONG_DOC_CHARS) {
+      const condensed = await this.llm.complete({
+        provider: opts.provider,
+        owner: opts.owner,
+        env,
+        system:
+          'Extract the key facts, claims, and terminology from this video transcript as concise bullet points in the transcript language. Do not invent facts.',
+        user: clipText(source, DOC_CONTEXT_CHARS),
+        temperature: 0.2,
+        maxTokens: 2000,
+      });
+      source = condensed.trim() || clipText(source, DOC_CONTEXT_CHARS);
+    }
+
+    const markdown = await this.llm.complete({
+      provider: opts.provider,
+      owner: opts.owner,
+      env,
+      system: `Summarize this video transcript into a structured study note in ${LANG[opts.lang]}. Use a short title heading, key points, and bullet lists. Keep only what the speaker says; do not invent facts.\n\n${MARKDOWN_FORMAT}`,
+      user: clipText(source, DOC_CONTEXT_CHARS),
+      temperature: 0.3,
+      maxTokens: 2500,
+    });
+    if (!markdown.trim() || markdown.length > 100000)
+      throw AppError.aiUpstream('Nội dung tóm tắt không hợp lệ hoặc quá dài.');
+    return markdown.trim();
   }
 
   async run(noteId: string, dto: RunAiDto, owner?: string) {

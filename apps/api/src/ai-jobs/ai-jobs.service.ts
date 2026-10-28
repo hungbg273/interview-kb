@@ -13,6 +13,7 @@ import { Subject } from 'rxjs';
 import type { AiJobView, AiJobResult, CreateQuestionBody } from '@kb/shared';
 import { AppError } from '../common/app-error';
 import { AiService, AiPreparedRequest } from '../ai/ai.service';
+import { TranscriptClient } from '../ai/transcript.client';
 import { RunAiDto } from '../ai/dto';
 import { providerConfig } from '../ai/llm.client';
 import { VIETNAMESE_STYLE } from '../ai/prompts/vietnamese-style';
@@ -43,12 +44,14 @@ export type StoredJob = {
     dto: RunAiDto;
     request: AiPreparedRequest;
     import?: Omit<StartInput, 'buffer' | 'owner'> & { base64: string };
+    video?: { videoUrl: string; lang: 'en' | 'vi' };
   };
   source_hash: string;
   output: {
     markdown?: string;
     questions?: CreateQuestionBody[];
     draft?: ImportDraft;
+    video?: { markdown: string; title: string; sourceUrl: string };
   } | null;
   result: AiJobResult | null;
   error: AiJobView['error'];
@@ -65,6 +68,7 @@ export class AiJobsService {
     private readonly db: DataSource,
     private readonly ai: AiService,
     private readonly chatgpt: ChatgptConnection,
+    private readonly transcripts: TranscriptClient,
     @Optional() private readonly imports?: PracticeImportService,
   ) {}
   view(row: StoredJob): AiJobView {
@@ -278,6 +282,79 @@ export class AiJobsService {
       return this.view(row);
     });
   }
+  async createVideo(
+    owner: string,
+    input: {
+      videoUrl: string;
+      lang: 'en' | 'vi';
+      provider: RunAiDto['provider'];
+    },
+    key: string,
+  ) {
+    const config = providerConfig(input.provider, process.env);
+    if (!config.apiKey) throw AppError.aiNotConfigured();
+    if (!(process.env.TRANSCRIPT_API_KEY ?? '').trim())
+      throw AppError.aiNotConfigured('Chưa cấu hình dịch vụ trích xuất video.');
+    const hash = createHash('sha256')
+      .update(JSON.stringify([input.videoUrl, input.lang, input.provider]))
+      .digest('hex');
+    return this.db.transaction(async (manager) => {
+      await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+        'ai-owner:' + owner,
+      ]);
+      const [existing]: StoredJob[] = await manager.query(
+        'SELECT * FROM ai_job WHERE owner=$1 AND idempotency_key=$2',
+        [owner, key],
+      );
+      if (existing) {
+        if (existing.payload_hash !== hash)
+          throw AppError.conflict('Mã yêu cầu đã được dùng cho nội dung khác.');
+        return this.view(existing);
+      }
+      const [{ count }] = await manager.query(
+        "SELECT count(*) FROM ai_job WHERE owner=$1 AND status IN ('queued','running','retrying')",
+        [owner],
+      );
+      if (Number(count) >= 3)
+        throw new AppError(
+          'AI_QUEUE_LIMIT',
+          'Bạn đang có 3 yêu cầu AI chưa hoàn tất. Vui lòng đợi.',
+          429,
+        );
+      const id = randomUUID();
+      const request: AiPreparedRequest = {
+        provider: input.provider,
+        system: '',
+        user: '',
+        model: config.model,
+        style: VIETNAMESE_STYLE,
+      };
+      const [row] = await manager.query(
+        `INSERT INTO ai_job(id,owner,note_id,note_title,idempotency_key,payload_hash,action,provider,input,source_hash,expires_at,result_expires_at) VALUES($1,$2,NULL,$3,$4,$5,'summarize-video',$6,$7,$5,now()+interval '5 minutes',now()+interval '1 hour') RETURNING *`,
+        [
+          id,
+          owner,
+          input.videoUrl,
+          key,
+          hash,
+          input.provider,
+          JSON.stringify({
+            dto: {
+              action: 'summarize-video',
+              provider: input.provider,
+              targetLang: input.lang,
+            },
+            request,
+            video: { videoUrl: input.videoUrl, lang: input.lang },
+          }),
+        ],
+      );
+      await manager.query('INSERT INTO ai_job_dispatch(job_id) VALUES($1)', [
+        id,
+      ]);
+      return this.view(row);
+    });
+  }
   async notify(id: string) {
     const row = await this.internal(id);
     if (row) this.changes.next({ owner: row.owner, job: this.view(row) });
@@ -365,6 +442,21 @@ export class AiJobsService {
       );
       return;
     }
+    if (row.input.video) {
+      const { videoUrl, lang } = row.input.video;
+      const { text, platform } = await this.transcripts.fetch(videoUrl);
+      const markdown = await this.ai.summarizeVideo(text, {
+        provider: row.provider,
+        lang,
+        owner: row.owner,
+      });
+      const title = `Video ${platform} · ${new Date().toISOString().slice(0, 10)}`;
+      await this.db.query(
+        "UPDATE ai_job SET output=$2,stage='saving',revision=revision+1,updated_at=now() WHERE id=$1 AND status='running'",
+        [row.id, JSON.stringify({ video: { markdown, title, sourceUrl: videoUrl } })],
+      );
+      return;
+    }
     const raw = await this.ai.generate(row.input.request, row.owner);
     let output: NonNullable<StoredJob['output']>;
     if (row.action === 'generate-questions') {
@@ -406,6 +498,25 @@ export class AiJobsService {
         };
         await manager.query(
           "UPDATE ai_job SET status='succeeded',stage='completed',result=$2,input=input-'import',error=NULL,revision=revision+1,updated_at=now() WHERE id=$1",
+          [id, JSON.stringify(result)],
+        );
+        return;
+      }
+      if (row.output?.video) {
+        if (new Date(row.expires_at).getTime() <= Date.now())
+          throw new AppError(
+            'AI_JOB_EXPIRED',
+            'Yêu cầu AI đã hết thời gian xử lý.',
+            408,
+          );
+        const result: AiJobResult = {
+          sourceHash: row.source_hash,
+          markdown: row.output.video.markdown,
+          title: row.output.video.title,
+          sourceUrl: row.output.video.sourceUrl,
+        };
+        await manager.query(
+          "UPDATE ai_job SET status='succeeded',stage='completed',result=$2,input=input-'video',error=NULL,revision=revision+1,updated_at=now() WHERE id=$1",
           [id, JSON.stringify(result)],
         );
         return;

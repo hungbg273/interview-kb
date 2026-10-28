@@ -32,6 +32,8 @@ export function AiJobPreviewModal({
   const [error, setError] = useState("");
   const [applying, setApplying] = useState(false);
   const [applied, setApplied] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const isVideo = job.action === "summarize-video";
   useEffect(() => {
     const opener = document.activeElement as HTMLElement | null;
     const overflow = document.body.style.overflow;
@@ -107,6 +109,27 @@ export function AiJobPreviewModal({
       setError(e instanceof Error ? e.message : "Không áp dụng được kết quả.");
     } finally {
       setApplying(false);
+    }
+  }
+  async function saveAsNote() {
+    if (!result?.markdown) return;
+    setSaving(true);
+    setError("");
+    try {
+      const body = result.sourceUrl
+        ? `${result.markdown}\n\n---\nNguồn: ${result.sourceUrl}`
+        : result.markdown;
+      const note = await api<{ id: string }>("/notes", {
+        method: "POST",
+        body: JSON.stringify({
+          title: (result.title || "Ghi chú từ video").slice(0, 200),
+          bodyMarkdown: body,
+        }),
+      });
+      window.location.assign(`/notes/${note.id}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không lưu được ghi chú.");
+      setSaving(false);
     }
   }
   return createPortal(
@@ -225,6 +248,15 @@ export function AiJobPreviewModal({
                 : applied
                   ? "Đã áp dụng"
                   : "Áp dụng vào ghi chú"}
+            </button>
+          )}
+          {result?.markdown && isVideo && !job.noteId && (
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => void saveAsNote()}
+            >
+              {saving ? "Đang lưu…" : "Lưu thành ghi chú mới"}
             </button>
           )}
           {result?.draftId && (

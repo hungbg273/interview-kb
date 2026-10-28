@@ -19,6 +19,7 @@ import {
 import type { Response } from 'express';
 import { merge, interval, map, filter, takeUntil, timer, finalize } from 'rxjs';
 import { RunAiDto } from '../ai/dto';
+import { VideoJobDto } from './dto';
 import { AiJobsService } from './ai-jobs.service';
 import { AppError } from '../common/app-error';
 type AuthRequest = { user: { email: string; exp?: number } };
@@ -99,6 +100,39 @@ export class AiJobsController {
     );
     res.setHeader('Location', '/ai-jobs/' + job.id);
     return { ...job, jobId: job.id };
+  }
+  @Post('ai-jobs/video')
+  @HttpCode(202)
+  async video(
+    @Req() req: AuthRequest,
+    @Body() dto: VideoJobDto,
+    @Headers('idempotency-key') key: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        key || '',
+      )
+    )
+      throw AppError.validation('Cần Idempotency-Key dạng UUID.');
+    try {
+      const job = await this.jobs.createVideo(
+        req.user.email,
+        { videoUrl: dto.videoUrl, lang: dto.lang, provider: dto.provider },
+        key,
+      );
+      res.setHeader('Location', '/ai-jobs/' + job.id);
+      return { ...job, jobId: job.id };
+    } catch (error) {
+      if (error instanceof AppError && error.getStatus() === 429)
+        res.setHeader('Retry-After', '10');
+      if (error instanceof AppError) throw error;
+      throw new AppError(
+        'AI_JOB_UNAVAILABLE',
+        'Chưa lưu được yêu cầu AI. Vui lòng thử lại.',
+        503,
+      );
+    }
   }
   @Get('ai-jobs') list(
     @Req() req: AuthRequest,

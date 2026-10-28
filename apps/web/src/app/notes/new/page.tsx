@@ -12,8 +12,91 @@ import {
 } from "@/components/WorkspaceNavigation";
 import { useNoteList } from "@/components/NotesProvider";
 import { NoteEditor } from "@/components/NoteEditor";
+import { useAiJobs } from "@/components/AiJobsProvider";
 
 type TopicChip = { id: string; name: string };
+
+function VideoToNote() {
+  const { submitVideo, openPreview } = useAiJobs();
+  const [url, setUrl] = useState("");
+  const [provider, setProvider] = useState<"deepseek" | "openai">("deepseek");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function start() {
+    const value = url.trim();
+    if (!value) return;
+    setBusy(true);
+    setError("");
+    try {
+      const job = await submitVideo({ videoUrl: value, lang: "vi", provider });
+      setUrl("");
+      openPreview(job);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không tạo được yêu cầu.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section
+      className="video-to-note"
+      style={{
+        border: "1px solid var(--border, #2a2a33)",
+        borderRadius: 12,
+        padding: "16px 20px",
+        marginBottom: 24,
+        background: "var(--panel, rgba(255,255,255,0.02))",
+      }}
+    >
+      <h2 style={{ margin: "0 0 4px" }}>Tạo từ video</h2>
+      <p className="empty" style={{ margin: "0 0 12px" }}>
+        Dán liên kết YouTube, TikTok hoặc Facebook. AI sẽ đọc lời thoại và tóm
+        tắt thành ghi chú.
+      </p>
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          flexWrap: "wrap",
+          alignItems: "center",
+        }}
+      >
+        <input
+          type="url"
+          value={url}
+          placeholder="https://youtu.be/..."
+          aria-label="Liên kết video"
+          onChange={(e) => setUrl(e.target.value)}
+          style={{ flex: "1 1 320px", minWidth: 0 }}
+        />
+        <select
+          aria-label="Nhà cung cấp AI"
+          value={provider}
+          onChange={(e) =>
+            setProvider(e.target.value as "deepseek" | "openai")
+          }
+        >
+          <option value="deepseek">DeepSeek</option>
+          <option value="openai">OpenAI</option>
+        </select>
+        <button
+          type="button"
+          disabled={busy || !url.trim()}
+          onClick={() => void start()}
+        >
+          {busy ? "Đang gửi…" : "Đọc video"}
+        </button>
+      </div>
+      {error && (
+        <p role="alert" className="error" style={{ marginTop: 8 }}>
+          {error}
+        </p>
+      )}
+    </section>
+  );
+}
 
 function NewNote() {
   const router = useRouter();
@@ -112,6 +195,7 @@ function NewNote() {
         </>
       }
     >
+      <VideoToNote />
       <NoteEditor
         title={title}
         bodyMarkdown={body}

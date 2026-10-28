@@ -26,6 +26,11 @@ type JobsContext = {
   submit: (noteId: string, payload: Submission) => Promise<AiJobView>;
   retry: (jobId: string) => Promise<AiJobView>;
   submitImport: (body: FormData) => Promise<AiJobView>;
+  submitVideo: (payload: {
+    videoUrl: string;
+    lang: "en" | "vi";
+    provider: "openai" | "deepseek";
+  }) => Promise<AiJobView>;
 };
 const unavailable = async (): Promise<AiJobView> => {
   throw new Error("Chưa khởi tạo danh sách yêu cầu AI.");
@@ -39,6 +44,7 @@ const Context = createContext<JobsContext>({
   submit: unavailable,
   retry: unavailable,
   submitImport: unavailable,
+  submitVideo: unavailable,
 });
 export const useAiJobs = () => useContext(Context);
 export function AiJobsProvider({ children }: { children: React.ReactNode }) {
@@ -167,7 +173,11 @@ export function AiJobsProvider({ children }: { children: React.ReactNode }) {
       document.removeEventListener("visibilitychange", focus);
     };
   }, [merge]);
-  const send = async (path: string, payload?: Submission, form?: FormData) => {
+  const send = async (
+    path: string,
+    payload?: Submission | Record<string, unknown>,
+    form?: FormData,
+  ) => {
     const identity =
       path +
       JSON.stringify(
@@ -210,6 +220,7 @@ export function AiJobsProvider({ children }: { children: React.ReactNode }) {
         submit: (id, payload) => send(`/notes/${id}/ai-jobs`, payload),
         retry: (id) => send(`/ai-jobs/${id}/retry`),
         submitImport: (form) => send("/practice/import-jobs", undefined, form),
+        submitVideo: (payload) => send("/ai-jobs/video", payload),
       }}
     >
       {children}

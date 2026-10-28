@@ -90,6 +90,7 @@ integration('AI jobs with real PostgreSQL and Redis, mocked AI only', () => {
           model: 'test-model',
         }),
       } as never,
+      { fetch: async () => ({ platform: 'youtube', text: '' }) } as never,
       imports,
     );
     queue = new Queue('test-ai-' + randomUUID(), {
