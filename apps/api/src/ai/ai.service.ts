@@ -1,4 +1,4 @@
-import { MARKDOWN_FORMAT } from "./prompts/markdown-format";
+import { MARKDOWN_FORMAT } from './prompts/markdown-format';
 export type AiPreparedRequest = {
   provider: import('@kb/shared').AiProvider;
   system: string;
@@ -41,6 +41,7 @@ function providerEnv(): ProviderEnv {
     DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY,
     DEEPSEEK_BASE_URL: process.env.DEEPSEEK_BASE_URL,
     DEEPSEEK_MODEL: process.env.DEEPSEEK_MODEL,
+    DEEPSEEK_TIMEOUT_MS: process.env.DEEPSEEK_TIMEOUT_MS,
   };
 }
 
@@ -88,7 +89,11 @@ export class AiService {
    */
   async summarizeVideo(
     transcript: string,
-    opts: { provider: import('@kb/shared').AiProvider; lang: AiLang; owner?: string },
+    opts: {
+      provider: import('@kb/shared').AiProvider;
+      lang: AiLang;
+      owner?: string;
+    },
   ): Promise<string> {
     const env = providerEnv();
     let source = transcript.trim();

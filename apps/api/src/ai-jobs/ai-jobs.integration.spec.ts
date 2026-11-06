@@ -59,13 +59,11 @@ integration('AI jobs with real PostgreSQL and Redis, mocked AI only', () => {
   beforeEach(async () => {
     owner = 'ai-job-test-' + randomUUID() + '@example.invalid';
     account = await new AccountsService(db).ensure(owner);
-    note = await db
-      .getRepository(Note)
-      .save({
-        userId: account.id,
-        title: 'Integration note',
-        bodyMarkdown: 'Original body',
-      });
+    note = await db.getRepository(Note).save({
+      userId: account.id,
+      title: 'Integration note',
+      bodyMarkdown: 'Original body',
+    });
     complete.mockReset().mockResolvedValue('Generated summary');
     const ai = new AiService(
       new NotesRepository(db),
@@ -369,7 +367,12 @@ integration('AI jobs with real PostgreSQL and Redis, mocked AI only', () => {
       app.useGlobalPipes(
         new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }),
       );
-      app.useGlobalFilters(new AppErrorFilter());
+      app.useGlobalFilters(
+        new AppErrorFilter({
+          setContext: jest.fn(),
+          error: jest.fn(),
+        } as never),
+      );
       await app.init();
       try {
         const response = await request(app.getHttpServer())
@@ -407,7 +410,7 @@ integration('AI jobs with real PostgreSQL and Redis, mocked AI only', () => {
         randomUUID(),
       );
       const get = jest
-        .spyOn(queue, 'getJob')
+        .spyOn(queue, 'add')
         .mockRejectedValueOnce(new Error('Redis unavailable'));
       await dispatcher.tick();
       get.mockRestore();
@@ -416,6 +419,43 @@ integration('AI jobs with real PostgreSQL and Redis, mocked AI only', () => {
           expiredId,
         ]),
       ).toHaveLength(0);
+    },
+  );
+  scenario(
+    'avoids repeated Redis lookups and recovers a lost queue entry',
+    async () => {
+      const created = await jobs.create(
+        owner,
+        note.id,
+        { action: 'summarize', provider: 'openai' },
+        randomUUID(),
+      );
+      const getJob = jest.spyOn(queue, 'getJob');
+      const add = jest.spyOn(queue, 'add');
+      const now = Date.now();
+      const clock = jest.spyOn(Date, 'now').mockReturnValue(now);
+      try {
+        await dispatcher.tick();
+        expect(add).toHaveBeenCalledTimes(1);
+        expect(getJob).not.toHaveBeenCalled();
+        for (let i = 1; i < 12; i++) {
+          clock.mockReturnValue(now + i * 5000);
+          await dispatcher.tick();
+        }
+        expect(getJob).not.toHaveBeenCalled();
+        const entry = await queue.getJob(created.id);
+        await entry!.remove();
+        getJob.mockClear();
+        clock.mockReturnValue(now + 60001);
+        await dispatcher.tick();
+        expect(getJob).toHaveBeenCalledTimes(1);
+        expect(add).toHaveBeenCalledTimes(2);
+        expect((await queue.getJob(created.id))?.id).toBe(created.id);
+      } finally {
+        clock.mockRestore();
+        getJob.mockRestore();
+        add.mockRestore();
+      }
     },
   );
 });

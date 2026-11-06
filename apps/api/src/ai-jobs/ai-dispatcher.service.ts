@@ -14,7 +14,12 @@ import { AppError } from '../common/app-error';
 export class AiDispatcher implements OnModuleInit, OnModuleDestroy {
   private timer?: ReturnType<typeof setInterval>;
   private busy = false;
+  private dispatching = false;
   private stopping = false;
+  private nextReconcileAt = 0;
+  private nextCleanupAt = 0;
+  private nextRedisAt = 0;
+  private redisBackoffMs = 5000;
   private readonly logger = new Logger(AiDispatcher.name);
   constructor(
     private readonly db: DataSource,
@@ -26,7 +31,7 @@ export class AiDispatcher implements OnModuleInit, OnModuleDestroy {
     );
   }
   onModuleInit() {
-    this.timer = setInterval(() => void this.tick(), 1000);
+    this.timer = setInterval(() => void this.tick(), 5000);
     void this.tick();
   }
   async onModuleDestroy() {
@@ -49,17 +54,44 @@ export class AiDispatcher implements OnModuleInit, OnModuleDestroy {
             408,
           ),
         );
-      await this.db.query(
-        'DELETE FROM practice_import_draft WHERE expires_at<now()',
+      if (Date.now() >= this.nextCleanupAt) {
+        await this.db.query(
+          'DELETE FROM practice_import_draft WHERE expires_at<now()',
+        );
+        await this.db.query(
+          `DELETE FROM ai_job WHERE result_expires_at<now() AND status IN ('succeeded','failed')`,
+        );
+        this.nextCleanupAt = Date.now() + 30_000;
+      }
+    } catch {
+      this.logger.warn(
+        'AI job deadline/retention maintenance temporarily unavailable.',
       );
-      await this.db.query(
-        `DELETE FROM ai_job WHERE result_expires_at<now() AND status IN ('succeeded','failed')`,
-      );
-      const pending: StoredJob[] = await this.db.query(
-        `SELECT j.* FROM ai_job j JOIN ai_job_dispatch d ON d.job_id=j.id WHERE j.status IN ('queued','running','retrying') ORDER BY j.created_at LIMIT 100`,
-      );
+      return;
+    } finally {
+      this.busy = false;
+    }
+
+    // BullMQ can wait indefinitely for its first Redis connection. Keep this
+    // guard separate so later ticks can still expire jobs and clean their data.
+    if (this.dispatching || this.stopping || Date.now() < this.nextRedisAt)
+      return;
+    this.dispatching = true;
+    try {
+      const reconcile = Date.now() >= this.nextReconcileAt;
+      const pending: (StoredJob & { dispatched_at: Date | null })[] =
+        await this.db.query(
+          `SELECT j.*,d.dispatched_at FROM ai_job j JOIN ai_job_dispatch d ON d.job_id=j.id
+         WHERE j.status IN ('queued','running','retrying') AND ($1::boolean OR d.dispatched_at IS NULL)
+         ORDER BY d.dispatched_at ASC NULLS FIRST,j.created_at LIMIT 100`,
+          [reconcile],
+        );
       for (const row of pending) {
-        let queued = await this.queue.getJob(row.id);
+        // Fresh outbox entries need only an idempotent add. Existing entries are
+        // inspected on the slower reconciliation pass, not on every scan.
+        let queued = row.dispatched_at
+          ? await this.queue.getJob(row.id)
+          : undefined;
         if (!queued) {
           queued = await this.queue.add(
             'generate',
@@ -83,6 +115,7 @@ export class AiDispatcher implements OnModuleInit, OnModuleDestroy {
                   'UPDATE ai_job_dispatch SET dispatched_at=NULL WHERE job_id=$1',
                   [row.id],
                 );
+                continue;
               }
             } else
               await this.jobs.fail(
@@ -94,16 +127,20 @@ export class AiDispatcher implements OnModuleInit, OnModuleDestroy {
           }
         }
         await this.db.query(
-          'UPDATE ai_job_dispatch SET dispatched_at=COALESCE(dispatched_at,now()) WHERE job_id=$1',
+          'UPDATE ai_job_dispatch SET dispatched_at=now() WHERE job_id=$1',
           [row.id],
         );
       }
+      if (reconcile) this.nextReconcileAt = Date.now() + 60_000;
+      this.redisBackoffMs = 5000;
     } catch {
+      this.nextRedisAt = Date.now() + this.redisBackoffMs;
+      this.redisBackoffMs = Math.min(60_000, this.redisBackoffMs * 2);
       this.logger.warn(
         'AI queue temporarily unavailable; durable jobs remain pending.',
       );
     } finally {
-      this.busy = false;
+      this.dispatching = false;
     }
   }
 }

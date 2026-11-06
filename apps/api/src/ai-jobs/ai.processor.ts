@@ -3,8 +3,13 @@ import { Job, UnrecoverableError } from 'bullmq';
 import { Logger } from '@nestjs/common';
 import { AI_QUEUE, redisConnection } from './ai-queue';
 import { AiJobsService } from './ai-jobs.service';
-import { canRetry } from './ai-job.policy';
-@Processor(AI_QUEUE, { concurrency: 1, connection: redisConnection() })
+import { canRetry, safeJobError } from './ai-job.policy';
+@Processor(AI_QUEUE, {
+  concurrency: 1,
+  connection: redisConnection(),
+  drainDelay: 60,
+  stalledInterval: 60_000,
+})
 export class AiProcessor extends WorkerHost {
   private readonly logger = new Logger(AiProcessor.name);
   constructor(private readonly jobs: AiJobsService) {
@@ -36,6 +41,17 @@ export class AiProcessor extends WorkerHost {
         row.attempts < 2 &&
         new Date(row.expires_at).getTime() > Date.now() + 10000;
       await this.jobs.fail(row.id, error, retry);
+      this.logger.warn(
+        JSON.stringify({
+          jobId: row.id,
+          action: row.action,
+          provider: row.provider,
+          attempt: row.attempts,
+          durationMs: Date.now() - started,
+          status: retry ? 'retrying' : 'failed',
+          errorCode: safeJobError(error).code,
+        }),
+      );
       if (retry) throw new Error('Transient AI failure');
       throw new UnrecoverableError('AI job failed');
     }

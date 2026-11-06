@@ -84,8 +84,14 @@ export class ChatgptConnection {
       process.env.CHATGPT_REDIRECT_URI ||
         'http://127.0.0.1:4000/chatgpt/callback',
     );
+    const local = ['localhost', '127.0.0.1', '[::1]'].includes(web.hostname);
     if (
-      !['localhost', '127.0.0.1', '[::1]'].includes(web.hostname) ||
+      (web.protocol !== 'https:' && !(local && web.protocol === 'http:')) ||
+      web.username ||
+      web.password ||
+      web.search ||
+      web.hash ||
+      web.pathname !== '/' ||
       redirect.protocol !== 'http:' ||
       redirect.hostname !== '127.0.0.1' ||
       redirect.pathname !== '/chatgpt/callback' ||
@@ -95,16 +101,32 @@ export class ChatgptConnection {
       redirect.password
     )
       throw AppError.aiNotConfigured(
-        'Kết nối ChatGPT hiện chỉ hỗ trợ ứng dụng cục bộ với callback 127.0.0.1.',
+        'Cần WEB_ORIGIN HTTPS (hoặc localhost) và callback HTTP 127.0.0.1/chatgpt/callback. Máy chủ từ xa cần forwarding khi kết nối.',
       );
     return {
       web: web.origin,
       redirectUri: redirect.href,
       loopback: redirect.origin,
+      connectionMode: local ? ('local' as const) : ('forwarded' as const),
+      callbackPort: Number(redirect.port || 80),
     };
   }
-  async begin(owner: string, returnPath = '/') {
+  async begin(owner: string, returnPath = '/', loopbackPort?: number) {
     const cfg = this.config();
+    if (loopbackPort !== undefined) {
+      if (
+        !Number.isInteger(loopbackPort) ||
+        loopbackPort < 1024 ||
+        loopbackPort > 65535
+      )
+        throw AppError.validation(
+          'Cổng forwarding phải là số nguyên từ 1024 đến 65535.',
+        );
+      const redirect = new URL(cfg.redirectUri);
+      redirect.port = String(loopbackPort);
+      cfg.redirectUri = redirect.href;
+      cfg.loopback = redirect.origin;
+    }
     if (this.disconnecting.has(owner)) throw connectionError();
     const generation = this.generation(owner);
     if (
@@ -372,7 +394,10 @@ export class ChatgptConnection {
   }
   async status(owner: string) {
     const saved = await this.store.read(owner);
+    const cfg = this.config();
     return {
+      connectionMode: cfg.connectionMode,
+      callbackPort: cfg.callbackPort,
       connected: !!saved?.accessToken,
       email: saved?.accessToken ? saved.email : undefined,
       model: saved?.accessToken ? saved.model : undefined,

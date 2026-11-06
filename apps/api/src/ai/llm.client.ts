@@ -12,12 +12,19 @@ export function providerConfig(provider: AiProvider, env: ProviderEnv) {
       apiKey: env.OPENAI_API_KEY ?? '',
       baseUrl: env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
       model: env.OPENAI_MODEL || 'gpt-4o-mini',
+      timeoutMs: 30_000,
     };
   }
   return {
     apiKey: env.DEEPSEEK_API_KEY ?? '',
     baseUrl: env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com/v1',
     model: env.DEEPSEEK_MODEL || 'deepseek-chat',
+    timeoutMs: (() => {
+      const value = Number(env.DEEPSEEK_TIMEOUT_MS);
+      return Number.isFinite(value) && value > 0
+        ? Math.min(120_000, Math.max(1000, Math.floor(value)))
+        : 120_000;
+    })(),
   };
 }
 
@@ -49,7 +56,7 @@ export class LlmClient {
     }
 
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 30_000);
+    const timer = setTimeout(() => ctrl.abort(), cfg.timeoutMs);
 
     try {
       const res = await fetch(
