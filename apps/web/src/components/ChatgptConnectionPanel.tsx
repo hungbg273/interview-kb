@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useCanNavigate } from "./WorkspaceNavigation";
+import forwarding from "../../../../config/chatgpt-forwarding.json";
 type Status = {
   connected: boolean;
   email?: string;
@@ -17,11 +18,9 @@ export function ChatgptConnectionPanel() {
     [error, setError] = useState(""),
     [message, setMessage] = useState("");
   const canNavigate = useCanNavigate();
-  const [loopbackPort, setLoopbackPort] = useState("4000");
   const load = useCallback(async () => {
     const next = await api<Status>("/chatgpt/status");
     setStatus(next);
-    setLoopbackPort(String(next.callbackPort ?? 4000));
     if (next.connected) setModels(await api<Model[]>("/chatgpt/models"));
   }, []);
   useEffect(() => {
@@ -43,18 +42,11 @@ export function ChatgptConnectionPanel() {
     setError("");
     try {
       const forwarded = status?.connectionMode === "forwarded";
-      const port = Number(loopbackPort);
-      if (
-        forwarded &&
-        (!Number.isInteger(port) || port < 1024 || port > 65535)
-      ) {
-        throw new Error("Cổng kết nối phải là số nguyên từ 1024 đến 65535.");
-      }
       const result = await api<{ url: string }>("/chatgpt/connect", {
         method: "POST",
         body: JSON.stringify({
           returnPath: window.location.pathname,
-          ...(forwarded ? { loopbackPort: port } : {}),
+          ...(forwarded ? { loopbackPort: forwarding.localPort } : {}),
         }),
       });
       window.location.assign(result.url);
@@ -147,22 +139,11 @@ export function ChatgptConnectionPanel() {
           {status?.connectionMode === "forwarded" && (
             <div>
               <p>
-                Khi dùng máy chủ từ xa, mở forwarding tới API trước khi tiếp
-                tục. Nhập cổng local do công cụ forwarding cung cấp. Chỉ cần giữ
-                kết nối này trong lúc đăng nhập hoặc kết nối lại ChatGPT.
+                Trên máy này, chạy <code>npm run chatgpt:connect</code> trong
+                thư mục ứng dụng trước khi tiếp tục. Công cụ tự thiết lập kết
+                nối; bạn không cần nhập cổng. Giữ terminal mở đến khi đăng nhập
+                xong.
               </p>
-              <label>
-                Cổng kết nối trên máy này
-                <input
-                  type="number"
-                  min={1024}
-                  max={65535}
-                  step={1}
-                  value={loopbackPort}
-                  disabled={busy}
-                  onChange={(event) => setLoopbackPort(event.target.value)}
-                />
-              </label>
             </div>
           )}
           <button

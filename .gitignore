@@ -31,3 +31,5 @@ apps/web/public/vendor/mermaid/
 !docs/chatgpt-connection.md
 !docs/superpowers/specs/2026-11-07-ai-runtime-design.md
 !docs/superpowers/plans/2026-11-07-ai-runtime.md
+!docs/superpowers/specs/2026-11-07-chatgpt-fixed-port-design.md
+!docs/superpowers/plans/2026-11-07-chatgpt-fixed-port.md

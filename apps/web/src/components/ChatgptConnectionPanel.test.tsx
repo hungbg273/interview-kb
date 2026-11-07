@@ -69,7 +69,7 @@ test("displays unconfirmed remote revocation and clears account locally", async 
   expect(screen.queryByText(/person@example.com/)).toBeNull();
 });
 
-test("uses the forwarded port for hosted personal ChatGPT connections", async () => {
+test("uses the fixed connector port without asking the user for a port", async () => {
   api
     .mockResolvedValueOnce({
       connected: false,
@@ -79,38 +79,39 @@ test("uses the forwarded port for hosted personal ChatGPT connections", async ()
     .mockRejectedValueOnce(new Error("Test stops before browser navigation"));
   canNavigate.mockReturnValue(true);
   render(<ChatgptConnectionPanel />);
-  const port = await screen.findByRole("spinbutton", {
-    name: "Cổng kết nối trên máy này",
-  });
-  expect(screen.getByText(/mở forwarding tới API/i)).toBeTruthy();
-  fireEvent.change(port, { target: { value: "36039" } });
+  expect(
+    await screen.findByText("npm run chatgpt:connect"),
+  ).toBeInTheDocument();
+  expect(screen.queryByRole("spinbutton")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Tiếp tục với ChatGPT" }));
   await waitFor(() =>
     expect(api).toHaveBeenCalledWith("/chatgpt/connect", {
       method: "POST",
       body: JSON.stringify({
         returnPath: window.location.pathname,
-        loopbackPort: 36039,
+        loopbackPort: 18080,
       }),
     }),
   );
 });
 
-test("rejects an invalid forwarded port before starting OAuth", async () => {
-  api.mockResolvedValue({
-    connected: false,
-    connectionMode: "forwarded",
-    callbackPort: 4000,
-  });
-  canNavigate.mockReturnValue(true);
+test("keeps connector instructions when a hosted account disconnects", async () => {
+  api
+    .mockResolvedValueOnce({
+      connected: true,
+      connectionMode: "forwarded",
+      email: "person@example.com",
+    })
+    .mockResolvedValueOnce([])
+    .mockResolvedValueOnce({ revoked: true });
   render(<ChatgptConnectionPanel />);
-  const port = await screen.findByRole("spinbutton", {
-    name: "Cổng kết nối trên máy này",
-  });
-  fireEvent.change(port, { target: { value: "80" } });
-  fireEvent.click(screen.getByRole("button", { name: "Tiếp tục với ChatGPT" }));
-  expect(await screen.findByRole("alert")).toHaveTextContent("1024 đến 65535");
-  expect(api).toHaveBeenCalledTimes(1);
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Ngắt kết nối ChatGPT" }),
+  );
+  expect(
+    await screen.findByText("npm run chatgpt:connect"),
+  ).toBeInTheDocument();
+  expect(screen.queryByRole("spinbutton")).toBeNull();
 });
 
 test("keeps local connections free of forwarding requirements", async () => {

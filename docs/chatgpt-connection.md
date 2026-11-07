@@ -19,15 +19,26 @@ Token không được trả về frontend. Mỗi tài khoản Google trong app c
 
 1. Deploy code API và web mới. Giữ `WEB_ORIGIN=https://app.interviewbase.site`, Google callback ở domain API production, và `CHATGPT_REDIRECT_URI=http://127.0.0.1:4000/chatgpt/callback`.
 2. Gắn persistent volume vào API, ví dụ `/data/chatgpt`, đặt `CHATGPT_CREDENTIALS_DIR=/data/chatgpt` và khóa mã hóa riêng ổn định `CHATGPT_TOKEN_SECRET`. File `host-id` cũng phải tồn tại qua restart. Chỉ chạy **một API replica** để giữ state OAuth và khóa refresh trong cùng tiến trình.
-3. Trên máy mở trình duyệt, chạy:
+3. Trên máy mở trình duyệt, cài Northflank CLI nếu chưa có (`npm install -g @northflank/cli`), chạy `northflank login` và chọn đúng team. Trong thư mục repo, chạy:
 
    ```bash
-   northflank forward service --projectId default --serviceId interview-kb --skipHostnames
+   npm run chatgpt:connect
    ```
 
-4. Giữ terminal này mở. Lấy địa chỉ loopback/cổng mà CLI in ra, ví dụ `127.0.0.1:36039`. Trong giao diện **production**, chọn ChatGPT và nhập `36039` vào **Cổng kết nối trên máy này**, rồi bấm **Tiếp tục với ChatGPT**. Phải forward tới API production, không phải API dev hoặc PostgreSQL.
-5. Trình duyệt đi tới `/chatgpt/authorize` qua cổng local đã forward, nhận cookie ràng buộc browser rồi chuyển tới OpenAI. Callback quay lại chính cổng đó. Server đổi code bằng PKCE, xác minh danh tính và scope, mã hóa token trên volume rồi đưa trình duyệt về giao diện production.
-6. Sau khi thấy kết nối thành công, có thể tắt forwarding. Inference và refresh token chạy trên API production. Nếu server restart trong lúc OAuth chưa xong, tạo lại yêu cầu kết nối. Lần kết nối lại có thể dùng cổng forwarding khác; URI chính xác được lưu riêng theo từng lần đăng nhập.
+4. Công cụ mở listener cố định `127.0.0.1:18080`, tự chạy forwarding tới API production, đọc cổng động Northflank cấp và kiểm tra API health trước khi mở giao diện production. Chọn ghi chú → ChatGPT → **Tiếp tục với ChatGPT**. Không còn ô nhập cổng. Giữ terminal này mở trong lúc đăng nhập.
+5. Trình duyệt đi tới `/chatgpt/authorize` qua cổng `18080`. Công cụ chuyển tiếp tới đường hầm Northflank, giữ Host loopback và cookie ràng buộc browser. OpenAI callback cũng quay lại `18080`; server đổi code bằng PKCE, xác minh danh tính và scope, mã hóa token trên volume rồi đưa trình duyệt về production. Cổng Northflank có đổi cũng không ảnh hưởng tới cổng callback cố định.
+6. Sau khi kết nối thành công, nhấn Ctrl+C để dừng công cụ. Inference và refresh token chạy trên API production. Nếu server hoặc công cụ restart trong lúc OAuth chưa xong, chạy lại công cụ rồi bắt đầu kết nối mới; không dùng lại callback cũ.
+
+### Công cụ local và xử lý lỗi
+
+- Cấu hình không chứa bí mật nằm trong `config/chatgpt-forwarding.json`: `localPort` (18080), `remotePort` (4000), project/service và web origin production. UI và công cụ dùng cùng một file. Nếu đổi cổng cố định, cần deploy lại web để hai bên khớp nhau.
+- Công cụ cần Node.js 24 và Northflank CLI đã đăng nhập, có quyền vào service. Đây là quy trình cho chủ app cá nhân, không yêu cầu mọi người dùng website có quyền Northflank.
+- Nếu dùng pnpm global, đảm bảo thư mục global bin có trong PATH. Có thể đặt `NORTHFLANK_BIN` thành đường dẫn tuyệt đối tới CLI nếu cần; không đặt API token trong biến này.
+- `npm run chatgpt:connect -- --no-open` chạy mà không tự mở trình duyệt; tự mở giao diện production khi công cụ báo sẵn sàng. Tự mở browser hỗ trợ macOS/Linux; nền tảng khác dùng URL được in ra.
+- Cổng 18080 bị chiếm: công cụ báo lỗi và không đổi cổng. Tắt phiên connector cũ rồi chạy lại. Không nhầm với API dev ở 4000.
+- CLI chưa đăng nhập, tunnel ngắt hoặc startup quá 45 giây: công cụ đóng listener/tiến trình forwarding và báo cách chạy lại. Không log URL OAuth, code, cookie hoặc thông tin đăng nhập CLI.
+- Công cụ chỉ bind 127.0.0.1 và chỉ chuyển tiếp GET `/chatgpt/authorize`, `/chatgpt/callback`; không mở toàn bộ API ra mạng local. `/health` trên 18080 cho biết tunnel đã sẵn sàng. Giữ các lệnh forwarding database riêng nếu bạn cần chúng để phát triển local.
+- Kiểm thử công cụ: `npm run test:chatgpt-connect`. Không dùng AI token thật trong các ca kiểm thử.
 
 Không sao chép token vào trình duyệt, localStorage, repo hay URL. `authorize` và `callback` chỉ chấp nhận Host `127.0.0.1`; cổng truyền vào connect được xác thực trong khoảng 1024–65535. Vẫn giữ kiểm tra state, nonce, PKCE, cookie và return path. HTTP log bỏ query string để không ghi code/state/ticket.
 

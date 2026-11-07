@@ -1,0 +1,7 @@
+{
+  "localPort": 18080,
+  "remotePort": 4000,
+  "projectId": "default",
+  "serviceId": "interview-kb",
+  "webOrigin": "https://app.interviewbase.site"
+}
