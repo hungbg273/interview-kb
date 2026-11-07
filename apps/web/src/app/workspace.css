@@ -381,7 +381,26 @@ input[type="radio"], input[type="checkbox"] { min-height: 0; accent-color: var(-
 .markdown-mode-switch { display:flex; padding:3px; gap:3px; background:var(--bg); border:1px solid var(--line); border-radius:7px; }
 .markdown-mode-switch button { padding:5px 10px; font-size:12px; }
 .markdown-mode-switch button[aria-pressed="true"] { background:#a78bfa1a; color:var(--accent-deep); }
-.note-markdown-preview { min-height:260px; padding:12px 0; }
+.note-markdown-preview {
+  --preview-max-height: clamp(180px, calc(100dvh - 400px), 640px);
+  width: 100%; min-width: 0;
+  min-height: min(260px, var(--preview-max-height));
+  max-height: var(--preview-max-height);
+  padding: 12px 8px 12px 0;
+  overflow-y: auto; overflow-x: hidden;
+  overscroll-behavior: contain; scrollbar-gutter: stable;
+  container-type: inline-size;
+}
+.note-markdown-preview:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.note-markdown-preview > .markdown-preview { min-width: 0; max-width: 100%; font-size: clamp(14px, 2.5cqi, 15px); line-height: 1.75; }
+.note-markdown-preview > .markdown-preview > :first-child { margin-top: 0; }
+.note-markdown-preview .markdown-preview h1 { font-size: clamp(20px, 4.5cqi, 26px); }
+.note-markdown-preview .markdown-preview h2 { font-size: clamp(18px, 3.7cqi, 21px); }
+.note-markdown-preview .markdown-preview h3 { font-size: clamp(16px, 3cqi, 18px); }
+.note-markdown-preview :is(pre, table, .mermaid-preview) { min-width: 0; max-width: 100%; overflow-x: auto; }
+.note-markdown-preview :is(th, td) { min-width: 12ch; }
+.note-markdown-preview .markdown-preview pre { white-space: pre; overflow-wrap: normal; }
+.note-markdown-preview img { max-width: 100%; height: auto; }
 .markdown-preview { line-height:1.75; overflow-wrap:anywhere; color:var(--ink); }
 .markdown-preview h1 { font-size:1.7rem; }
 .markdown-preview h2 { font-size:1.35rem; text-transform:none; letter-spacing:-.02em; }
@@ -397,6 +416,10 @@ input[type="radio"], input[type="checkbox"] { min-height: 0; accent-color: var(-
 .mermaid-preview > img { display:block; margin:auto; max-width:100%; height:auto; }
 .mermaid-preview [role="alert"] { color:var(--danger); }
 @media(max-width:600px) { .note-content-toolbar { flex-wrap:wrap; } }
+@media(max-width:600px) {
+  .note-markdown-preview { --preview-max-height: clamp(160px, 45dvh, 480px); padding-right: 4px; }
+  .note-markdown-preview :is(th, td) { padding: 8px 10px; }
+}
 
 .publication-controls { margin-top:32px; padding:18px 0; border-top:1px solid var(--line); }
 .publication-controls strong { font-size:13px; }

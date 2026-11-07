@@ -3,7 +3,6 @@
 import { WorkspaceLink } from "./WorkspaceNavigation";
 
 import { MarkdownField } from "./MarkdownField";
-import { MarkdownPreview } from "./MarkdownPreview";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 
@@ -103,13 +102,6 @@ export function TopicNoteContent({
               {note.title || "Không tiêu đề"}
             </WorkspaceLink>
           </h2>
-          <div className="markdown-content">
-            {note.bodyMarkdown ? (
-              <MarkdownPreview markdown={note.bodyMarkdown} />
-            ) : (
-              <p className="muted">Ghi chú chưa có nội dung.</p>
-            )}
-          </div>
           <div className="note-content-actions">
             <button
               type="button"

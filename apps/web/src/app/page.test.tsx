@@ -81,7 +81,7 @@ describe('HomePage explorer', () => {
     expect(screen.getByRole('button', { name: 'Thêm chủ đề con' })).toBeVisible();
   });
 
-  it('shows note content in the center and only the selected topic and children in the right graph', async () => {
+  it('shows note titles without body content and only the selected topic and children in the right graph', async () => {
     api.mockImplementation(async (path: string) => {
       if (path === '/topics') return [{id:'net',name:'Networking'},{id:'other',name:'Other'}];
       if (path === '/topics?parentId=net') return [{id:'tcp',name:'TCP'}];
@@ -92,14 +92,16 @@ describe('HomePage explorer', () => {
     render(<HomePage />);
     fireEvent.click(await screen.findByRole('button', {name:'Mở chủ đề Networking'}));
     const content = screen.getByRole('region', {name:'Nội dung chủ đề'});
-    expect(await within(content).findByText('Reliable delivery.')).toBeInTheDocument();
+    expect(await within(content).findByRole('link', {name:'OSI vs TCP/IP'})).toHaveAttribute('href', '/notes/n1');
+    expect(within(content).queryByText('Reliable delivery.')).not.toBeInTheDocument();
+    expect(within(content).queryByRole('heading', {name:'Transport layer'})).not.toBeInTheDocument();
     const graph = screen.getByRole('region', {name:'Đồ thị cục bộ'});
     expect(await within(graph).findByRole('button', {name:'TCP'})).toBeInTheDocument();
     expect(within(graph).getByRole('button', {name:'Networking'})).toBeInTheDocument();
     expect(within(graph).queryByRole('button', {name:'Other'})).not.toBeInTheDocument();
     fireEvent.click(within(graph).getByRole('button', {name:'TCP'}));
     await waitFor(() => expect(api).toHaveBeenCalledWith('/notes?topicId=tcp'));
-    expect(within(content).queryByText('Reliable delivery.')).not.toBeInTheDocument();
+    expect(within(content).queryByRole('link', {name:'OSI vs TCP/IP'})).not.toBeInTheDocument();
   });
 
   it('deletes a note from the panel', async () => {

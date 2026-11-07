@@ -50,6 +50,7 @@ export function MarkdownField({
         <section
           className="note-markdown-preview"
           aria-label="Xem trước nội dung"
+          tabIndex={0}
         >
           {value ? (
             <MarkdownPreview markdown={value} />
