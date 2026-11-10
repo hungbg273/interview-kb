@@ -1,5 +1,5 @@
 import { MarkdownField } from "./MarkdownField";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export function NoteEditor(props: {
   disabled?: boolean;
@@ -20,12 +20,22 @@ export function NoteEditor(props: {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  const [saveError, setSaveError] = useState("");
+  useEffect(() => { setSaved(false); }, [props.title, props.bodyMarkdown, props.topics]);
+
   async function handleSave() {
     if (saving || props.disabled) return;
     setSaving(true);
+    setSaved(false);
+    setSaveError("");
     try {
       const result = await props.onSave();
-      if (result !== false) setSaved(true);
+      if (result !== false) {
+        setSaved(true);
+        props.onSavedAck?.();
+      }
+    } catch {
+      setSaveError("Không lưu được ghi chú. Nội dung của bạn vẫn được giữ, hãy thử lại.");
     } finally {
       setSaving(false);
     }
@@ -98,29 +108,8 @@ export function NoteEditor(props: {
           {saving ? "Đang lưu…" : "Lưu"}
         </button>
       </fieldset>
-      {saved && (
-        <div className="save-pop" role="presentation">
-          <div
-            className="save-pop-card"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="save-pop-title"
-          >
-            <h2 id="save-pop-title">Đã lưu</h2>
-            <p>Ghi chú đã được lưu.</p>
-            <button
-              type="button"
-              autoFocus
-              onClick={() => {
-                setSaved(false);
-                props.onSavedAck?.();
-              }}
-            >
-              OK
-            </button>
-          </div>
-        </div>
-      )}
+      <p className="save-status" role="status" aria-live="polite">{saved ? "Đã lưu" : ""}</p>
+      {saveError && <p className="error" role="alert">{saveError}</p>}
     </div>
   );
 }

@@ -61,6 +61,7 @@ test("can pick question count and run new AI actions", () => {
   fireEvent.click(screen.getByRole("button", { name: "Sinh câu hỏi" }));
   expect(onRun).toHaveBeenCalledWith({
     action: "generate-questions",
+    questionType: "mcq",
     count: 5,
     difficulty: "medium",
     targetLang: "vi",

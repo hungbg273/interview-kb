@@ -1,3 +1,5 @@
+import { PracticeAttempt } from '../entities/practice-attempt.entity';
+import { PracticeAttemptQuestion } from '../entities/practice-attempt-question.entity';
 import { DataSource } from 'typeorm';
 import { Note } from '../entities/note.entity';
 import { NoteTopic } from '../entities/note-topic.entity';
@@ -24,9 +26,17 @@ describe('typeorm config', () => {
     expect(options.synchronize).toBe(false);
     expect(options.type).toBe('postgres');
     expect(options.entities).toEqual(
-      expect.arrayContaining([Topic, TopicParent, Note, NoteTopic, Question]),
+      expect.arrayContaining([
+        Topic,
+        TopicParent,
+        Note,
+        NoteTopic,
+        Question,
+        PracticeAttempt,
+        PracticeAttemptQuestion,
+      ]),
     );
-    expect(entities).toHaveLength(5);
+    expect(entities).toHaveLength(7);
     expect(createDataSource()).toBeInstanceOf(DataSource);
   });
 });

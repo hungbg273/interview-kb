@@ -3,6 +3,10 @@ import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
 
 export class RunAiDto {
+  @IsOptional()
+  @IsIn(['mcq', 'essay'])
+  questionType?: 'mcq' | 'essay';
+
   @IsIn([
     'summarize',
     'expand',

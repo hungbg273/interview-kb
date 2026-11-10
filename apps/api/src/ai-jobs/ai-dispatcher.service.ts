@@ -1,3 +1,5 @@
+import { Optional } from '@nestjs/common';
+import { PracticeAttemptsService } from '../practice/practice-attempts.service';
 import {
   Injectable,
   OnModuleInit,
@@ -25,6 +27,7 @@ export class AiDispatcher implements OnModuleInit, OnModuleDestroy {
     private readonly db: DataSource,
     @InjectQueue(AI_QUEUE) private readonly queue: Queue,
     private readonly jobs: AiJobsService,
+    @Optional() private readonly practice?: PracticeAttemptsService,
   ) {
     this.queue.on('error', () =>
       this.logger.warn('AI queue connection temporarily unavailable.'),
@@ -54,6 +57,7 @@ export class AiDispatcher implements OnModuleInit, OnModuleDestroy {
             408,
           ),
         );
+      await this.practice?.resumePending();
       if (Date.now() >= this.nextCleanupAt) {
         await this.db.query(
           'DELETE FROM practice_import_draft WHERE expires_at<now()',
@@ -82,7 +86,7 @@ export class AiDispatcher implements OnModuleInit, OnModuleDestroy {
       const pending: (StoredJob & { dispatched_at: Date | null })[] =
         await this.db.query(
           `SELECT j.*,d.dispatched_at FROM ai_job j JOIN ai_job_dispatch d ON d.job_id=j.id
-         WHERE j.status IN ('queued','running','retrying') AND ($1::boolean OR d.dispatched_at IS NULL)
+         WHERE j.status IN ('queued','running','retrying') AND ($1::boolean OR d.dispatched_at IS NULL OR (j.status='queued' AND j.attempts=0 AND j.input->'import'->'progress' IS NOT NULL))
          ORDER BY d.dispatched_at ASC NULLS FIRST,j.created_at LIMIT 100`,
           [reconcile],
         );

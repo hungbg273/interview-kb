@@ -177,3 +177,51 @@ describe('HomePage explorer', () => {
     });
   });
 });
+
+it('opens only one mobile panel and restores focus on Escape', async () => {
+  vi.stubGlobal('matchMedia', vi.fn(() => ({matches:true,addEventListener:vi.fn(),removeEventListener:vi.fn()})));
+  api.mockImplementation(async (path: string) => path === '/topics' ? [] : {items:[]});
+  render(<HomePage />);
+  const left = await screen.findByRole('button', {name:'Hiện cây chủ đề'});
+  fireEvent.click(left);
+  expect(screen.getByRole('navigation', {name:'Cây chủ đề'})).toBeVisible();
+  const right = screen.getByRole('button', {name:'Hiện thông tin chủ đề'});
+  fireEvent.click(right);
+  expect(screen.queryByRole('navigation', {name:'Cây chủ đề'})).toBeNull();
+  expect(screen.getByRole('region', {name:'Nội dung chủ đề'})).toHaveAttribute('inert');
+  fireEvent.keyDown(screen.getByRole('main'), {key:'Escape'});
+  expect(right).toHaveFocus();
+  expect(screen.getByRole('region', {name:'Nội dung chủ đề'})).not.toHaveAttribute('inert');
+  vi.unstubAllGlobals();
+});
+
+it('keeps a topic name after a failed create and retries inline', async () => {
+  let fail = true;
+  api.mockImplementation(async (path:string, options?:{method?:string}) => {
+    if (options?.method === 'POST') { if (fail) throw new Error('offline'); return {id:'new',name:'HTTP'}; }
+    return path === '/topics' ? [] : {items:[]};
+  });
+  render(<HomePage />);
+  fireEvent.click(await screen.findByRole('button', {name:'Thêm chủ đề gốc'}));
+  fireEvent.change(screen.getByLabelText('Tên chủ đề'), {target:{value:'HTTP'}});
+  fireEvent.click(screen.getByRole('button', {name:'Tạo chủ đề'}));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Nội dung nhập vẫn được giữ');
+  expect(screen.getByLabelText('Tên chủ đề')).toHaveValue('HTTP');
+  fail = false;
+  fireEvent.click(screen.getByRole('button', {name:'Tạo chủ đề'}));
+  await waitFor(() => expect(screen.queryByLabelText('Tên chủ đề')).toBeNull());
+});
+
+it('retries failed search and clears the search error', async () => {
+  let fail = true;
+  api.mockImplementation(async (path:string) => {
+    if (path.startsWith('/search')) { if (fail) throw new Error('offline'); return {topics:[],notes:[{id:'http',title:'HTTP cache'}]}; }
+    return path === '/topics' ? [] : {items:[]};
+  });
+  render(<HomePage />);
+  fireEvent.change(screen.getByLabelText('Tìm chủ đề hoặc tiêu đề ghi chú'), {target:{value:'HTTP'}});
+  const retry = await screen.findByRole('button', {name:'Tìm lại'});
+  fail = false; fireEvent.click(retry);
+  expect(await screen.findByRole('link', {name:'HTTP cache'})).toBeInTheDocument();
+  expect(screen.queryByText('Không tìm kiếm được. Hãy thử lại.')).toBeNull();
+});

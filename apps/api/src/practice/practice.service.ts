@@ -67,7 +67,9 @@ export class PracticeService {
     }
 
     const limit = query.limit ?? 10;
-    const items = shuffle([...byId.values()]).slice(0, limit).map(toPublic);
+    const items = shuffle([...byId.values()].filter((q) => q.type !== 'essay'))
+      .slice(0, limit)
+      .map(toPublic);
     return { items };
   }
 
@@ -84,6 +86,8 @@ export class PracticeService {
 
     const items = dto.answers.map((answer) => {
       const row = byId.get(answer.questionId)!;
+      if (row.type === 'essay')
+        throw AppError.validation('Use practice attempts for essay grading');
       const ok = row.correctChoice === answer.choice;
       return {
         questionId: row.id,

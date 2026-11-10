@@ -43,7 +43,9 @@ export class LlmClient {
     json?: boolean;
     maxTokens?: number;
     temperature?: number;
+    signal?: AbortSignal;
   }): Promise<string> {
+    opts.signal?.throwIfAborted();
     const system = `${opts.style ?? VIETNAMESE_STYLE}\n\n${opts.system}`;
     if (opts.provider === 'chatgpt') {
       if (!this.chatgpt)
@@ -77,7 +79,9 @@ export class LlmClient {
             ...(opts.maxTokens ? { max_tokens: opts.maxTokens } : {}),
             ...(opts.json ? { response_format: { type: 'json_object' } } : {}),
           }),
-          signal: ctrl.signal,
+          signal: opts.signal
+            ? AbortSignal.any([ctrl.signal, opts.signal])
+            : ctrl.signal,
         },
       );
 

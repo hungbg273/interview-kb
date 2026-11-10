@@ -5,31 +5,26 @@ import { AiJobStatus } from "@/components/AiJobStatus";
 import { activeJob } from "@/lib/ai-jobs";
 import type { AiJobResult } from "@kb/shared";
 import { ChatgptConnectionPanel } from "@/components/ChatgptConnectionPanel";
-import { api, ApiError } from "@/lib/api";
+import { api } from "@/lib/api";
 import { AiLang } from "@kb/shared";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
+
+import { PracticeRunner } from "./PracticeRunner";
+import type { PracticeAttemptView, AiProvider } from "@kb/shared";
 
 type Chip = { id: string; label: string };
 type SearchHits = { notes: Chip[]; topics: Chip[] };
 type QuizQuestion = {
+  type?: "mcq" | "essay";
   id: string;
   prompt: string;
-  choiceA: string;
-  choiceB: string;
-  choiceC: string;
-  choiceD: string;
+  choiceA?: string | null;
+  choiceB?: string | null;
+  choiceC?: string | null;
+  choiceD?: string | null;
   suggestedTopics?: string[];
   draftId?: string;
 };
-type GradeItem = {
-  questionId: string;
-  prompt: string;
-  choice: string;
-  correctChoice: string;
-  ok: boolean;
-  explanationMarkdown: string | null;
-};
-type GradeResult = { total: number; correct: number; items: GradeItem[] };
 type KeepState = {
   keep: boolean;
   note: Chip | null;
@@ -37,7 +32,6 @@ type KeepState = {
 };
 type DraftBundle = { draftId: string; items: QuizQuestion[] };
 
-const letters = ["A", "B", "C", "D"] as const;
 const levels = ["fresher", "junior", "middle", "senior", "expert"] as const;
 
 function emptyKeep(item: QuizQuestion): KeepState {
@@ -52,20 +46,6 @@ function addChip(list: Chip[], hit: Chip) {
   return list.some((item) => item.id === hit.id) ? list : [...list, hit];
 }
 
-function mergeGrades(parts: GradeResult[], order: string[]): GradeResult {
-  const byId = new Map(
-    parts.flatMap((part) => part.items.map((item) => [item.questionId, item])),
-  );
-  const items = order
-    .map((id) => byId.get(id))
-    .filter((item): item is GradeItem => Boolean(item));
-  return {
-    total: items.length,
-    correct: items.filter((item) => item.ok).length,
-    items,
-  };
-}
-
 function Practice() {
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<SearchHits>({ notes: [], topics: [] });
@@ -75,7 +55,102 @@ function Practice() {
   const [useJd, setUseJd] = useState(false);
   const [cvFile, setCvFile] = useState<File | null>(null);
   const [jdFile, setJdFile] = useState<File | null>(null);
-  const [limit, setLimit] = useState(10);
+  const [mcqCount, setMcqCount] = useState(6),
+    [essayCount, setEssayCount] = useState(4);
+  const [availability, setAvailability] = useState<{
+    mcq: number;
+    essay: number;
+    providers: Record<AiProvider, boolean>;
+  } | null>(null);
+  const [provider, setProvider] = useState<AiProvider>("chatgpt");
+  const [attempt, setAttempt] = useState<PracticeAttemptView | null>(null);
+  const [resumeId, setResumeId] = useState<string | null>(null);
+  const [storageKey, setStorageKey] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
+  const startGuard = useRef(false);
+  const savedKeeps = useRef(new Map<string, string>());
+  const request = useRef<{ payload: string; key: string } | null>(null);
+  const limit = mcqCount + essayCount;
+  const validCounts =
+    Number.isInteger(mcqCount) &&
+    Number.isInteger(essayCount) &&
+    mcqCount >= 0 &&
+    essayCount >= 0 &&
+    limit >= 1 &&
+    limit <= 50;
+  useEffect(() => {
+    let live = true;
+    api<{ email: string }>("/auth/me")
+      .then((me) => {
+        if (!live || !me?.email) return;
+        const key = "practice-attempt:" + me.email;
+        setStorageKey(key);
+        try {
+          setResumeId(localStorage.getItem(key));
+        } catch {}
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (attempt && storageKey) {
+      try {
+        localStorage.setItem(storageKey, attempt.id);
+      } catch {}
+    }
+  }, [attempt, storageKey]);
+  async function createAttempt(draftIds: string[] = []) {
+    const body = {
+      noteIds: pickedNotes.map((n) => n.id),
+      topicIds: pickedTopics.map((t) => t.id),
+      draftIds,
+      mcqCount,
+      essayCount,
+      lang,
+      ...(essayCount ? { provider } : {}),
+    };
+    const payload = JSON.stringify(body);
+    if (request.current?.payload !== payload)
+      request.current = { payload, key: crypto.randomUUID() };
+    const next = await api<PracticeAttemptView>("/practice/attempts", {
+      method: "POST",
+      body: JSON.stringify({ ...body, requestKey: request.current.key }),
+    });
+    setAttempt(next);
+    if (storageKey) {
+      try {
+        localStorage.setItem(storageKey, next.id);
+      } catch {}
+    }
+    setPhase("quiz");
+  }
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("attempt");
+    if (id && /^[0-9a-f-]{36}$/i.test(id)) {
+      api<PracticeAttemptView>(`/practice/attempts/${id}`)
+        .then((next) => {
+          setAttempt(next);
+          setPhase("quiz");
+        })
+        .catch((e) =>
+          setError(e instanceof Error ? e.message : "Không mở được bài."),
+        );
+    }
+  }, []);
+  async function resume() {
+    if (!resumeId) return;
+    try {
+      setAttempt(
+        await api<PracticeAttemptView>(`/practice/attempts/${resumeId}`),
+      );
+      setPhase("quiz");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không mở được bài.");
+    }
+  }
+
   const [lang, setLang] = useState<AiLang>("vi");
   const [level, setLevel] = useState<(typeof levels)[number]>("junior");
   const [drafts, setDrafts] = useState<DraftBundle[]>([]);
@@ -86,16 +161,25 @@ function Practice() {
   );
   const [empty, setEmpty] = useState(false);
   const [error, setError] = useState("");
-  const [items, setItems] = useState<QuizQuestion[]>([]);
-  const [index, setIndex] = useState(0);
-  const [choice, setChoice] = useState<string | null>(null);
-  const [answers, setAnswers] = useState<
-    Array<{ questionId: string; choice: string }>
-  >([]);
-  const [result, setResult] = useState<GradeResult | null>(null);
-
   const fromDoc = useCv || useJd;
   const hasPool = pickedNotes.length > 0 || pickedTopics.length > 0;
+  useEffect(() => {
+    let cancelled = false;
+    setAvailability(null);
+    const query = new URLSearchParams({ lang });
+    pickedNotes.forEach((n) => query.append("noteId", n.id));
+    pickedTopics.forEach((t) => query.append("topicId", t.id));
+    api<{ mcq: number; essay: number; providers: Record<AiProvider, boolean> }>(
+      `/practice/attempts/options?${query}`,
+    )
+      .then((data) => {
+        if (!cancelled) setAvailability(data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [pickedNotes, pickedTopics, lang]);
   const noteHits = hits.notes.filter(
     (hit) => !pickedNotes.some((item) => item.id === hit.id),
   );
@@ -140,17 +224,6 @@ function Practice() {
   function pickTopic(hit: Chip) {
     setPickedTopics((prev) => addChip(prev, hit));
     closeSearch();
-  }
-
-  async function fetchPool() {
-    const params = new URLSearchParams();
-    for (const note of pickedNotes) params.append("noteId", note.id);
-    for (const topic of pickedTopics) params.append("topicId", topic.id);
-    params.set("limit", String(limit));
-    params.set("lang", lang);
-    return api<{ items: QuizQuestion[] }>(
-      `/practice/questions?${params.toString()}`,
-    );
   }
 
   const { jobs, selectedJobId, selectionVersion, submitImport } = useAiJobs();
@@ -203,6 +276,8 @@ function Practice() {
     body.append("source", source);
     body.append("lang", lang);
     body.append("level", level);
+    body.append("mcqCount", String(mcqCount));
+    body.append("essayCount", String(essayCount));
     if (file) body.append("file", file);
     return submitImport(body);
   }
@@ -231,22 +306,24 @@ function Practice() {
   }
 
   async function startFromPool() {
-    if (!hasPool) return;
-    setEmpty(false);
+    if (!hasPool || startGuard.current) return;
+    startGuard.current = true;
+    setStarting(true);
     setError("");
     try {
-      const data = await fetchPool();
-      if (data.items.length === 0) {
-        setEmpty(true);
-        return;
-      }
-      beginQuiz(data.items);
+      await createAttempt();
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Không bắt đầu được");
+      setError(e instanceof Error ? e.message : "Không bắt đầu được");
+    } finally {
+      startGuard.current = false;
+      setStarting(false);
     }
   }
 
   async function startFromReview() {
+    if (startGuard.current) return;
+    startGuard.current = true;
+    setStarting(true);
     const selected = draftItems.filter(
       (item) => keeps[item.id]?.keep && keeps[item.id]?.note,
     );
@@ -254,104 +331,47 @@ function Practice() {
     try {
       for (const bundle of drafts) {
         const kept = selected.filter((item) => item.draftId === bundle.draftId);
-        if (kept.length === 0) continue;
-        await api(`/practice/imports/${bundle.draftId}`, {
-          method: "PATCH",
-          body: JSON.stringify({
-            keeps: kept.map((item) => ({
-              questionId: item.id,
-              noteId: keeps[item.id].note!.id,
-              topicNames: keeps[item.id].topicNames
-                .split(",")
-                .map((name) => name.trim())
-                .filter(Boolean),
-            })),
-          }),
+
+        const keepBody = JSON.stringify({
+          keeps: kept.map((item) => ({
+            questionId: item.id,
+            noteId: keeps[item.id].note!.id,
+            topicNames: keeps[item.id].topicNames
+              .split(",")
+              .map((name) => name.trim())
+              .filter(Boolean),
+          })),
         });
-      }
-      let pool: QuizQuestion[] = [];
-      if (hasPool) {
-        const data = await fetchPool();
-        pool = data.items;
-      }
-      const nextItems = [...selected, ...pool];
-      if (nextItems.length === 0) {
-        setEmpty(true);
-        return;
-      }
-      beginQuiz(nextItems);
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Không bắt đầu được");
-    }
-  }
-
-  function beginQuiz(nextItems: QuizQuestion[]) {
-    setItems(nextItems);
-    setIndex(0);
-    setChoice(null);
-    setAnswers([]);
-    setResult(null);
-    setPhase("quiz");
-  }
-
-  async function commitChoice() {
-    if (!choice) return;
-    const current = items[index];
-    const nextAnswers = [...answers, { questionId: current.id, choice }];
-    if (index + 1 < items.length) {
-      setAnswers(nextAnswers);
-      setIndex(index + 1);
-      setChoice(null);
-      return;
-    }
-    try {
-      const byDraft = new Map<string, typeof nextAnswers>();
-      const poolAnswers: typeof nextAnswers = [];
-      for (const answer of nextAnswers) {
-        const question = items.find((item) => item.id === answer.questionId);
-        if (question?.draftId) {
-          const group = byDraft.get(question.draftId) ?? [];
-          group.push(answer);
-          byDraft.set(question.draftId, group);
-        } else {
-          poolAnswers.push(answer);
+        if (savedKeeps.current.get(bundle.draftId) !== keepBody) {
+          await api(`/practice/imports/${bundle.draftId}`, {
+            method: "PATCH",
+            body: keepBody,
+          });
+          savedKeeps.current.set(bundle.draftId, keepBody);
         }
       }
-      const parts: GradeResult[] = [];
-      for (const [draftId, draftAnswers] of byDraft) {
-        parts.push(
-          await api<GradeResult>(`/practice/imports/${draftId}/grade`, {
-            method: "POST",
-            body: JSON.stringify({ answers: draftAnswers }),
-          }),
-        );
-      }
-      if (poolAnswers.length > 0) {
-        parts.push(
-          await api<GradeResult>("/practice/grade", {
-            method: "POST",
-            body: JSON.stringify({ answers: poolAnswers }),
-          }),
-        );
-      }
-      setResult(
-        mergeGrades(
-          parts,
-          nextAnswers.map((answer) => answer.questionId),
-        ),
-      );
-      setPhase("results");
+      await createAttempt(drafts.map((d) => d.draftId));
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Không chấm được");
+      setError(e instanceof Error ? e.message : "Không bắt đầu được");
+    } finally {
+      startGuard.current = false;
+      setStarting(false);
     }
   }
 
   function reset() {
+    setAttempt(null);
+    setResumeId(null);
+    request.current = null;
+    savedKeeps.current.clear();
+    if (storageKey) {
+      try {
+        localStorage.removeItem(storageKey);
+      } catch {}
+    }
     setPhase("setup");
     setEmpty(false);
     setError("");
-    setItems([]);
-    setResult(null);
     setPickedNotes([]);
     setPickedTopics([]);
     setUseCv(false);
@@ -365,26 +385,28 @@ function Practice() {
     setKeeps({});
   }
 
-  const current = items[index];
-  const canStartDraft = draftItems.some(
-    (item) => keeps[item.id]?.keep && keeps[item.id]?.note,
-  );
-  const canStartReview = canStartDraft || hasPool;
+  const canStartReview = draftItems.length > 0 || hasPool;
 
   return (
     <main className="practice">
       {phase === "setup" && (
         <section className="sheet">
           <h1>Luyện tập</h1>
+          {resumeId && (
+            <button onClick={() => void resume()}>Tiếp tục bài đang làm</button>
+          )}
           <p className="kicker">
-            Chọn ghi chú, chủ đề, hoặc tải CV/JD — có thể mix.
+            Kết hợp ghi chú, chủ đề hoặc CV/JD để chuẩn bị bài luyện tập.
           </p>
-          {(useCv || useJd) && <ChatgptConnectionPanel />}
           {importJobs.map((job) => (
             <AiJobStatus key={job.id} job={job} onResult={openImportResults} />
           ))}
+          <section className="practice-section" aria-labelledby="practice-sources">
+          <h2 id="practice-sources">Nguồn kiến thức</h2>
           <div className="search-field">
+            <label htmlFor="practice-search">Tìm trong thư viện</label>
             <input
+              id="practice-search"
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Tìm ghi chú hoặc chủ đề"
@@ -480,17 +502,59 @@ function Practice() {
               Từ JD
             </label>
           </div>
+          </section>
+          <section className="practice-section" aria-labelledby="practice-settings">
+          <h2 id="practice-settings">Cấu hình bài</h2>
           <div className="form-grid">
             <label>
-              Số câu
+              Trắc nghiệm
               <input
                 type="number"
-                min={1}
+                min={0}
                 max={50}
-                value={limit}
-                onChange={(e) => setLimit(Number(e.target.value))}
+                value={mcqCount}
+                onChange={(e) => setMcqCount(Number(e.target.value))}
               />
             </label>
+            <label>
+              Tự luận
+              <input
+                type="number"
+                min={0}
+                max={50}
+                value={essayCount}
+                onChange={(e) => setEssayCount(Number(e.target.value))}
+              />
+            </label>
+            <p>Tổng: {limit} câu (1–50)</p>
+            {hasPool && availability && (
+              <p>
+                Trong thư viện đã chọn: {availability.mcq} trắc nghiệm,{" "}
+                {availability.essay} tự luận.
+              </p>
+            )}
+            {essayCount > 0 && (
+              <label>
+                AI chấm tự luận
+                <select
+                  value={provider}
+                  onChange={(e) => setProvider(e.target.value as AiProvider)}
+                >
+                  {(["chatgpt", "openai", "deepseek"] as const).map((p) => (
+                    <option
+                      key={p}
+                      value={p}
+                      disabled={availability?.providers[p] === false}
+                    >
+                      {p}
+                      {availability?.providers[p] === false
+                        ? " — chưa kết nối"
+                        : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <label>
               Ngôn ngữ
               <select
@@ -541,10 +605,23 @@ function Practice() {
               )}
             </div>
           )}
+          <details className="practice-advanced">
+            <summary>Kết nối AI</summary>
+          {(useCv || useJd || (essayCount > 0 && provider === "chatgpt")) && (
+            <ChatgptConnectionPanel />
+          )}
+          </details>
+          </section>
+          <section className="practice-section" aria-labelledby="practice-start">
+          <h2 id="practice-start">Bắt đầu luyện tập</h2>
+          <p className="practice-summary">{mcqCount} câu trắc nghiệm · {essayCount} câu tự luận · {lang === 'vi' ? 'Tiếng Việt' : 'English'}</p>
+          {!hasPool && !fromDoc && <p className="field-hint">Chọn ít nhất một ghi chú hoặc chủ đề ở phần Nguồn kiến thức.</p>}
           {fromDoc && (
             <button
               type="button"
-              disabled={importSubmitting || importJobs.some(activeJob)}
+              disabled={
+                importSubmitting || importJobs.some(activeJob) || !validCounts
+              }
               onClick={() => void generateFromDoc()}
             >
               Sinh câu hỏi
@@ -553,20 +630,30 @@ function Practice() {
           {!fromDoc && (
             <button
               type="button"
-              disabled={!hasPool}
+              disabled={!hasPool || !validCounts || starting}
               onClick={() => void startFromPool()}
             >
               Bắt đầu
             </button>
           )}
+          {essayCount > 0 && availability?.providers[provider] === false && (
+            <p className="field-hint">
+              Hãy kết nối hoặc chọn một AI khả dụng để chấm tự luận.
+            </p>
+          )}
           {empty && <p className="empty">Chưa có câu hỏi cho lựa chọn này</p>}
-          {error && <p className="banner">{error}</p>}
+          {error && <p className="banner" role="alert">{error}</p>}
+          </section>
         </section>
       )}
 
       {phase === "review" && (
         <section className="sheet">
           <h1>Chọn câu giữ lại</h1>
+          <p>
+            Các câu trong tài liệu được dùng để luyện tập. Chọn Giữ và ghi chú
+            đích nếu muốn lưu vào thư viện.
+          </p>
           <div className="search-field">
             <input
               value={q}
@@ -594,10 +681,14 @@ function Practice() {
                       Giữ
                     </label>
                     <p>{item.prompt}</p>
-                    <p>
-                      A. {item.choiceA} / B. {item.choiceB} / C. {item.choiceC}{" "}
-                      / D. {item.choiceD}
-                    </p>
+                    {item.type === "essay" ? (
+                      <p>Tự luận</p>
+                    ) : (
+                      <p>
+                        A. {item.choiceA} / B. {item.choiceB} / C.{" "}
+                        {item.choiceC} / D. {item.choiceD}
+                      </p>
+                    )}
                     <label>
                       Chủ đề
                       <input
@@ -637,7 +728,7 @@ function Practice() {
           </ul>
           <button
             type="button"
-            disabled={!canStartReview}
+            disabled={!canStartReview || !validCounts || starting}
             onClick={() => void startFromReview()}
           >
             Bắt đầu
@@ -647,70 +738,8 @@ function Practice() {
         </section>
       )}
 
-      {phase === "quiz" && current && (
-        <section className="sheet">
-          <p className="kicker">
-            Câu {index + 1} / {items.length}
-          </p>
-          <h1 className="practice-question">{current.prompt}</h1>
-          <div className="quiz-choices">
-            {letters.map((letter) => {
-              const text = {
-                A: current.choiceA,
-                B: current.choiceB,
-                C: current.choiceC,
-                D: current.choiceD,
-              }[letter];
-              return (
-                <label key={letter}>
-                  <input
-                    type="radio"
-                    name="choice"
-                    value={letter}
-                    checked={choice === letter}
-                    onChange={() => setChoice(letter)}
-                  />
-                  {letter}. {text}
-                </label>
-              );
-            })}
-          </div>
-          <button
-            type="button"
-            disabled={!choice}
-            onClick={() => void commitChoice()}
-          >
-            {index + 1 < items.length ? "Câu tiếp" : "Nộp bài"}
-          </button>
-          {error && <p className="banner">{error}</p>}
-        </section>
-      )}
-
-      {phase === "results" && result && (
-        <section className="sheet">
-          <h1>
-            Đúng {result.correct} / {result.total}
-          </h1>
-          <ul className="question-list">
-            {result.items.map((item) => (
-              <li key={item.questionId}>
-                <div>
-                  <p>{item.prompt}</p>
-                  <p>
-                    Bạn chọn {item.choice} — đáp án {item.correctChoice} —{" "}
-                    {item.ok ? "đúng" : "sai"}
-                  </p>
-                  {item.explanationMarkdown && (
-                    <p>{item.explanationMarkdown}</p>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-          <button type="button" onClick={reset}>
-            Làm đề khác
-          </button>
-        </section>
+      {phase === "quiz" && attempt && (
+        <PracticeRunner key={attempt.id} initial={attempt} onExit={reset} />
       )}
     </main>
   );

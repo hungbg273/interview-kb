@@ -6,6 +6,8 @@ dist/
 coverage/
 .env
 .env.local
+.env.secrets.json
+.env.sensitive.json
 *.log
 .DS_Store
 .chatgpt/
@@ -28,6 +30,9 @@ apps/web/public/vendor/mermaid/
 !docs/superpowers/plans/2026-10-28-interview-voices.md
 !docs/superpowers/plans/2026-10-28-optional-interview-context.md
 
+!docs/meeting-assistant.md
+!docs/superpowers/specs/2026-10-29-meeting-assistant-design.md
+!docs/superpowers/plans/2026-10-29-meeting-assistant.md
 !docs/chatgpt-connection.md
 !docs/superpowers/specs/2026-11-07-ai-runtime-design.md
 !docs/superpowers/plans/2026-11-07-ai-runtime.md

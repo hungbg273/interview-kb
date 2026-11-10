@@ -1,9 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChatgptConnectionPanel } from "./ChatgptConnectionPanel";
 import { AiAction, AiDifficulty, AiLang, AiProvider } from "@kb/shared";
 
 export type AiRunPayload = {
   action: AiAction;
+  questionType?: "mcq" | "essay";
   count?: number;
   targetLang?: AiLang;
   difficulty?: AiDifficulty;
@@ -28,6 +29,7 @@ export function AiPanel(props: {
   onApply: () => void;
   onDiscard: () => void;
 }) {
+  const [questionType, setQuestionType] = useState<"mcq" | "essay">("mcq");
   const previewRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (props.preview)
@@ -101,6 +103,16 @@ export function AiPanel(props: {
           </button>
         </div>
         <label>
+          Loại câu hỏi
+          <select
+            value={questionType}
+            onChange={(e) => setQuestionType(e.target.value as "mcq" | "essay")}
+          >
+            <option value="mcq">Trắc nghiệm</option>
+            <option value="essay">Tự luận</option>
+          </select>
+        </label>
+        <label>
           Số câu
           <input
             type="number"
@@ -143,6 +155,7 @@ export function AiPanel(props: {
           onClick={() =>
             props.onRun({
               action: "generate-questions",
+              questionType,
               count: props.questionCount,
               difficulty: props.difficulty,
               targetLang: props.questionLang,

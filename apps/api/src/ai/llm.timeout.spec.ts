@@ -85,4 +85,28 @@ describe('provider timeout budget', () => {
     await jest.advanceTimersByTimeAsync(1);
     await result;
   });
+
+  it('honors caller cancellation before the provider deadline', async () => {
+    const controller = new AbortController();
+    global.fetch = jest.fn(
+      (_url, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () =>
+            reject(new DOMException('Aborted', 'AbortError')),
+          );
+        }),
+    );
+    const pending = new LlmClient().complete({
+      provider: 'deepseek',
+      env: { DEEPSEEK_API_KEY: 'test' },
+      system: 's',
+      user: 'u',
+      signal: controller.signal,
+    });
+    const result = expect(pending).rejects.toMatchObject({
+      code: 'AI_TIMEOUT',
+    });
+    controller.abort();
+    await result;
+  });
 });

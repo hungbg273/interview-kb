@@ -58,6 +58,19 @@ export class GradePracticeDto {
 }
 
 export class StartImportDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(50)
+  mcqCount?: number;
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(50)
+  essayCount?: number;
+
   @IsIn(['cv', 'jd'])
   source!: 'cv' | 'jd';
 
@@ -102,4 +115,3 @@ export class ImportGradeDto {
   @Type(() => ImportGradeAnswerDto)
   answers!: ImportGradeAnswerDto[];
 }
-

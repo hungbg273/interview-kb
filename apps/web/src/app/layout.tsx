@@ -2,6 +2,7 @@ import { Be_Vietnam_Pro, Source_Serif_4 } from 'next/font/google';
 import { AppWorkspace } from '@/components/AppWorkspace';
 import './globals.css';
 import './workspace.css';
+import './motion.css';
 
 const sans = Be_Vietnam_Pro({
   subsets: ['latin', 'vietnamese'],

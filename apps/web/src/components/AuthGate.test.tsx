@@ -225,3 +225,16 @@ it("keeps the current draft on transient session-check network failure", async (
   expect(screen.getByLabelText("Local draft")).toHaveValue("Unsaved");
   expect(replace).not.toHaveBeenCalled();
 });
+
+it("opens mobile navigation and closes it with Escape without losing the draft", async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, {email:'you@example.com'})));
+  render(<AuthGate><input aria-label="Draft" defaultValue="Keep me" /></AuthGate>);
+  const toggle = await screen.findByRole('button', {name:'Mở điều hướng'});
+  fireEvent.click(toggle);
+  expect(toggle).toHaveAttribute('aria-expanded','true');
+  fireEvent.keyDown(toggle, {key:'Escape'});
+  expect(toggle).toHaveAttribute('aria-expanded','false');
+  expect(toggle).toHaveFocus();
+  expect(screen.getByLabelText('Draft')).toHaveValue('Keep me');
+  expect(screen.getByRole('link', {name:'Đến nội dung chính'})).toHaveAttribute('href','#workspace-content');
+});

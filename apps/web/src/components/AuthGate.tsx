@@ -15,6 +15,11 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   replaceRef.current = router.replace;
   const [email, setEmail] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuToggle = useRef<HTMLButtonElement>(null);
+  const content = useRef<HTMLDivElement>(null);
+  useEffect(() => { setMenuOpen(false); }, [path]);
+  const pageTitle = path.startsWith('/practice') ? 'Luyện tập' : path.startsWith('/community') ? 'Cộng đồng' : path.startsWith('/interview') ? 'Phỏng vấn thử' : 'Ghi chú';
 
   useEffect(() => {
     let cancelled = false;
@@ -60,6 +65,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="workspace-shell" key={email}>
+      <a className="skip-link" href="#workspace-content" onClick={() => content.current?.focus()}>Đến nội dung chính</a>
       <nav className="workspace-ribbon" aria-label="Điều hướng chính">
         <WorkspaceLink
           className="vault-mark"
@@ -102,7 +108,16 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
           <WorkspaceIcon name="logout" />
         </button>
       </nav>
-      <header className="topbar">
+      <header className="topbar" onKeyDown={event => {
+        if (event.key === 'Escape' && menuOpen) { setMenuOpen(false); menuToggle.current?.focus(); }
+      }} onBlur={event => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setMenuOpen(false);
+      }}>
+        <button ref={menuToggle} type="button" className="mobile-nav-toggle" aria-expanded={menuOpen} aria-controls="main-links" aria-label="Mở điều hướng" onClick={() => setMenuOpen(value => !value)}><WorkspaceIcon name="panel" /></button>
+        <span className="mobile-page-title">{pageTitle}</span>
+        <WorkspaceLink className="mobile-create" href="/notes/new" aria-label="Viết ghi chú"><WorkspaceIcon name="plus" /></WorkspaceLink>
+        <nav id="main-links" onClick={event => { if (!event.defaultPrevented && (event.target as HTMLElement).closest('a')) setMenuOpen(false); }} aria-label="Các trang" className={`main-links${menuOpen ? ' is-open' : ''}`}>
+
         <WorkspaceLink
           href="/"
           className={`brand${path === "/" ? " active" : ""}`}
@@ -124,10 +139,12 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         <WorkspaceLink href="/interview" className={path.startsWith('/interview') ? 'active' : undefined}>
           Phỏng vấn thử
         </WorkspaceLink>
-        <span className="who">{email}</span>
+        <button className="mobile-logout ghost" type="button" onClick={() => void logout()}>Đăng xuất tài khoản</button>
+        </nav>
+        <span className="who" title={email}>{email}</span>
         <span className="session-dot" title="Đã đăng nhập" />
       </header>
-      {children}
+      <div id="workspace-content" ref={content} tabIndex={-1}>{children}</div>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { MeetingsModule } from './meetings/meetings.module';
 import { InterviewsModule } from './interviews/interviews.module';
 import { CommunityModule } from './community/community.module';
 import { AiJobsModule } from './ai-jobs/ai-jobs.module';
@@ -57,6 +58,7 @@ import { TopicsModule } from './topics/topics.module';
     SearchModule,
     CommunityModule,
     InterviewsModule,
+    MeetingsModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_FILTER, useClass: AppErrorFilter }],

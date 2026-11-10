@@ -31,3 +31,16 @@ it('lets the user choose when a topic has multiple parents',async()=>{
  fireEvent.click(await screen.findByRole('button',{name:'Parent B'}));
  expect(onSelect).toHaveBeenCalledWith({id:'b',name:'Parent B'});
 });
+it('keeps full accessible names and opens a child from the styled graph', async () => {
+ api.mockResolvedValue({parentIds:[]});
+ const onSelect=vi.fn();
+ const child={id:'http',name:'HTTP caching và chính sách kiểm soát bộ nhớ đệm'};
+ render(<LocalTopicGraph topic={{id:'root',name:'Mạng máy tính'}} onSelect={onSelect}>{[child]}</LocalTopicGraph>);
+ const node=screen.getByRole('button',{name:child.name});
+ expect(node).toHaveAttribute('title',child.name);
+ fireEvent.focus(node);
+ fireEvent.click(node);
+ expect(onSelect).toHaveBeenCalledWith(child);
+ expect(screen.getByRole('button',{name:'Mạng máy tính'})).toHaveAttribute('aria-pressed','true');
+ await waitFor(()=>expect(api).toHaveBeenCalledWith('/topics/root'));
+});

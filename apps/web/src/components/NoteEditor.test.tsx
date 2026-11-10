@@ -46,7 +46,7 @@ test("shows subject chips under the title", () => {
   expect(screen.getByPlaceholderText("+ Chủ đề")).toBeTruthy();
 });
 
-test("shows a popup after a successful save", async () => {
+test("announces a successful save without blocking editing", async () => {
   const onSave = vi.fn().mockResolvedValue(true);
   render(
     <NoteEditor
@@ -59,8 +59,28 @@ test("shows a popup after a successful save", async () => {
   );
   fireEvent.click(screen.getByRole("button", { name: "Lưu" }));
   expect(
-    await screen.findByRole("dialog", { name: "Đã lưu" }),
+    await screen.findByText("Đã lưu"),
   ).toBeInTheDocument();
+});
+
+test("does not announce a failed save or acknowledge it", async () => {
+  const ack = vi.fn();
+  render(<NoteEditor title="T" bodyMarkdown="" onTitleChange={() => {}} onBodyChange={() => {}} onSave={async () => false} onSavedAck={ack} />);
+  fireEvent.click(screen.getByRole("button", { name: "Lưu" }));
+  await vi.waitFor(() => expect(screen.getByRole("button", { name: "Lưu" })).toBeEnabled());
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(screen.queryByText("Đã lưu")).toBeNull();
+  expect(ack).not.toHaveBeenCalled();
+});
+
+test("acknowledges successful creation immediately and keeps focus", async () => {
+  const ack = vi.fn();
+  render(<NoteEditor title="T" bodyMarkdown="" onTitleChange={() => {}} onBodyChange={() => {}} onSave={async () => true} onSavedAck={ack} />);
+  const save = screen.getByRole("button", { name: "Lưu" });
+  save.focus(); fireEvent.click(save);
+  await vi.waitFor(() => expect(ack).toHaveBeenCalledOnce());
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(save).toHaveFocus();
 });
 
 test("previews the unsaved draft and preserves it when returning to edit", async () => {

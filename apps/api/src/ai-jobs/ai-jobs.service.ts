@@ -1,3 +1,8 @@
+import { questionFields } from '../questions/question-fields';
+import { isValidQuestion, type QuestionInput } from '@kb/shared';
+import { PracticeAttemptsRepository } from '../database/practice-attempts.repository';
+import { PracticeAttemptsService } from '../practice/practice-attempts.service';
+import { validateGrade } from '../practice/practice-policy';
 import { accountForEmail } from '../accounts/accounts.service';
 import { withAccount } from '../accounts/account-context';
 import { Optional } from '@nestjs/common';
@@ -10,7 +15,7 @@ import { Injectable } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
 import { createHash, randomUUID } from 'node:crypto';
 import { Subject } from 'rxjs';
-import type { AiJobView, AiJobResult, CreateQuestionBody } from '@kb/shared';
+import type { AiJobView, AiJobResult } from '@kb/shared';
 import { AppError } from '../common/app-error';
 import { AiService, AiPreparedRequest } from '../ai/ai.service';
 import { TranscriptClient } from '../ai/transcript.client';
@@ -20,21 +25,15 @@ import { VIETNAMESE_STYLE } from '../ai/prompts/vietnamese-style';
 import { ChatgptConnection } from '../chatgpt/chatgpt.connection';
 import { Note } from '../entities/note.entity';
 import { Question } from '../entities/question.entity';
-import { isValidMcq } from '@kb/shared';
 import { parseLlmJsonArray } from '../ai/llm-json';
-import {
-  ACTIVE_STATES,
-  isTerminal,
-  sourceHash,
-  safeJobError,
-} from './ai-job.policy';
+import { isTerminal, sourceHash, safeJobError } from './ai-job.policy';
 
 export type StoredJob = {
   id: string;
   owner: string;
   note_id: string | null;
   note_title: string;
-  action: RunAiDto['action'] | 'import-document';
+  action: RunAiDto['action'] | 'import-document' | 'grade-practice-answer';
   provider: RunAiDto['provider'];
   status: AiJobView['status'];
   stage: string;
@@ -44,12 +43,20 @@ export type StoredJob = {
     dto: RunAiDto;
     request: AiPreparedRequest;
     import?: Omit<StartInput, 'buffer' | 'owner'> & { base64: string };
+    practice?: {
+      attemptId: string;
+      itemId: string;
+      userId: string;
+      revision: number;
+      snapshot: import('@kb/shared').QuestionInput;
+    };
     video?: { videoUrl: string; lang: 'en' | 'vi' };
   };
   source_hash: string;
   output: {
+    grade?: import('@kb/shared').GradeResult;
     markdown?: string;
-    questions?: CreateQuestionBody[];
+    questions?: QuestionInput[];
     draft?: ImportDraft;
     video?: { markdown: string; title: string; sourceUrl: string };
   } | null;
@@ -70,9 +77,14 @@ export class AiJobsService {
     private readonly chatgpt: ChatgptConnection,
     private readonly transcripts: TranscriptClient,
     @Optional() private readonly imports?: PracticeImportService,
+    @Optional() private readonly practiceRepo?: PracticeAttemptsRepository,
+    @Optional() private readonly practice?: PracticeAttemptsService,
   ) {}
   view(row: StoredJob): AiJobView {
     return {
+      ...(row.input?.practice
+        ? { attemptId: row.input.practice.attemptId }
+        : {}),
       id: row.id,
       noteId: row.note_id,
       noteTitle: row.note_title,
@@ -133,6 +145,7 @@ export class AiJobsService {
           dto.count ?? null,
           dto.targetLang ?? null,
           dto.difficulty ?? null,
+          dto.questionType ?? null,
         ]),
       )
       .digest('hex');
@@ -178,12 +191,10 @@ export class AiJobsService {
           'Bạn đang có 3 yêu cầu AI chưa hoàn tất. Vui lòng đợi.',
           429,
         );
-      const current = await manager
-        .getRepository(Note)
-        .findOne({
-          where: { id: noteId, userId: account.id },
-          lock: { mode: 'pessimistic_read' },
-        });
+      const current = await manager.getRepository(Note).findOne({
+        where: { id: noteId, userId: account.id },
+        lock: { mode: 'pessimistic_read' },
+      });
       if (!current || current.updatedAt.getTime() !== note.updatedAt.getTime())
         throw AppError.conflict(
           'Ghi chú vừa thay đổi. Vui lòng gửi lại yêu cầu AI.',
@@ -212,10 +223,24 @@ export class AiJobsService {
     return view;
   }
   async createImport(owner: string, input: StartInput, key: string) {
+    const mcq = input.mcqCount ?? 8,
+      essay = input.essayCount ?? 0;
+    if (
+      !Number.isInteger(mcq) ||
+      !Number.isInteger(essay) ||
+      mcq < 0 ||
+      essay < 0 ||
+      mcq + essay < 1 ||
+      mcq + essay > 50
+    )
+      throw AppError.validation('Tổng số câu phải từ 1 đến 50.');
     const payload = {
       source: input.source,
       lang: input.lang,
       level: input.level,
+      mcqCount: input.mcqCount,
+      essayCount: input.essayCount,
+      progress: input.progress,
       filename: input.filename,
       mime: input.mime,
       base64: input.buffer.toString('base64'),
@@ -370,6 +395,7 @@ export class AiJobsService {
       ],
     );
     await this.notify(id);
+    if (!retry) await this.resumePractice(id);
   }
   async begin(id: string) {
     const row = await this.internal(id);
@@ -426,9 +452,21 @@ export class AiJobsService {
     if (row.input.import) {
       if (!this.imports) throw AppError.aiUpstream();
       const { base64, ...input } = row.input.import;
+      const previous = input.progress;
+      const priorMcq =
+        previous?.questions.filter((q) => q.type !== 'essay').length ?? 0;
+      const priorEssay =
+        previous?.questions.filter((q) => q.type === 'essay').length ?? 0;
+      const wantedMcq = input.mcqCount ?? 8,
+        wantedEssay = input.essayCount ?? 0;
+      const batchMcq = Math.min(8, wantedMcq - priorMcq);
+      const batchEssay = Math.min(8 - batchMcq, wantedEssay - priorEssay);
       const draft = await withAccount(account, () =>
         this.imports!.generateDraft({
           ...input,
+          mcqCount: batchMcq,
+          essayCount: batchEssay,
+          existingPrompts: previous?.questions.map((q) => q.prompt),
           buffer: Buffer.from(base64, 'base64'),
           owner: row.owner,
           model: row.input.request.model,
@@ -436,6 +474,21 @@ export class AiJobsService {
           style: row.input.request.style,
         }),
       );
+      if (previous) {
+        draft.id = previous.id;
+        draft.questions = [...previous.questions, ...draft.questions];
+      }
+      if (draft.questions.length < wantedMcq + wantedEssay) {
+        row.input.import.progress = draft;
+        // Each worker invocation generates at most eight questions. The durable
+        // checkpoint survives retries/restarts; the dispatcher requeues this job.
+        await this.db.query(
+          "UPDATE ai_job SET input=$2,status='queued',stage='waiting',attempts=0,expires_at=now()+interval '5 minutes',revision=revision+1,updated_at=now() WHERE id=$1 AND status='running'",
+          [row.id, JSON.stringify(row.input)],
+        );
+        await this.notify(row.id);
+        return false;
+      }
       await this.db.query(
         "UPDATE ai_job SET output=$2,stage='saving',revision=revision+1,updated_at=now() WHERE id=$1 AND status='running'",
         [row.id, JSON.stringify({ draft })],
@@ -453,15 +506,30 @@ export class AiJobsService {
       const title = `Video ${platform} · ${new Date().toISOString().slice(0, 10)}`;
       await this.db.query(
         "UPDATE ai_job SET output=$2,stage='saving',revision=revision+1,updated_at=now() WHERE id=$1 AND status='running'",
-        [row.id, JSON.stringify({ video: { markdown, title, sourceUrl: videoUrl } })],
+        [
+          row.id,
+          JSON.stringify({ video: { markdown, title, sourceUrl: videoUrl } }),
+        ],
       );
       return;
     }
     const raw = await this.ai.generate(row.input.request, row.owner);
     let output: NonNullable<StoredJob['output']>;
-    if (row.action === 'generate-questions') {
+    if (row.input.practice) {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        throw AppError.aiUpstream('Invalid grading JSON');
+      }
+      output = { grade: validateGrade(row.input.practice.snapshot, parsed) };
+    } else if (row.action === 'generate-questions') {
       const questions = parseLlmJsonArray(raw)
-        .filter((item): item is CreateQuestionBody => isValidMcq(item as never))
+        .filter(
+          (item): item is QuestionInput =>
+            isValidQuestion(item) &&
+            (item.type ?? 'mcq') === (row.input.dto.questionType ?? 'mcq'),
+        )
         .slice(0, row.input.dto.count ?? 5);
       if (!questions.length)
         throw AppError.aiUpstream('AI chưa tạo được câu hỏi hợp lệ.');
@@ -483,6 +551,30 @@ export class AiJobsService {
         [id],
       );
       if (!row || isTerminal(row.status)) return;
+      if (row.input.practice && row.output?.grade) {
+        if (
+          !this.practiceRepo ||
+          new Date(row.expires_at).getTime() <= Date.now()
+        )
+          throw AppError.aiTimeout();
+        await this.practiceRepo.finalize(
+          manager,
+          row.input.practice,
+          id,
+          row.output.grade,
+        );
+        await manager.query(
+          "UPDATE ai_job SET status='succeeded',stage='completed',result=$2,error=NULL,revision=revision+1,updated_at=now() WHERE id=$1",
+          [
+            id,
+            JSON.stringify({
+              sourceHash: row.source_hash,
+              attemptId: row.input.practice.attemptId,
+            }),
+          ],
+        );
+        return;
+      }
       if (row.output?.draft) {
         if (!this.imports) throw AppError.aiUpstream();
         if (new Date(row.expires_at).getTime() <= Date.now())
@@ -541,16 +633,7 @@ export class AiJobsService {
           manager.getRepository(Question).create({
             note: { id: row.note_id! },
             userId: account.id,
-            prompt: item.prompt.trim(),
-            choiceA: item.choiceA.trim(),
-            choiceB: item.choiceB.trim(),
-            choiceC: item.choiceC.trim(),
-            choiceD: item.choiceD.trim(),
-            correctChoice: item.correctChoice,
-            explanationMarkdown:
-              typeof item.explanationMarkdown === 'string'
-                ? item.explanationMarkdown.trim() || null
-                : null,
+            ...questionFields(item),
             lang: row.input.dto.targetLang!,
             source: 'ai',
           }),
@@ -565,6 +648,16 @@ export class AiJobsService {
       );
     });
     await this.notify(id);
+    await this.resumePractice(id);
+  }
+  async resumePractice(id: string) {
+    const row = await this.internal(id);
+    if (row?.input.practice && this.practice) {
+      const account = await accountForEmail(this.db, row.owner);
+      await withAccount(account, () =>
+        this.practice!.get(row.input.practice!.attemptId),
+      );
+    }
   }
   async result(owner: string, id: string) {
     const row = await this.owned(owner, id);

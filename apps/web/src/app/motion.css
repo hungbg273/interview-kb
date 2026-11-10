@@ -1,0 +1,103 @@
+/* Functional motion only: user-opened surfaces and direct interaction feedback.
+   Keep content visible by default; reduced-motion users get the resting state. */
+:root {
+  --motion-fast: 140ms;
+  --motion-panel: 200ms;
+  --motion-notice: 220ms;
+  --motion-ease: cubic-bezier(.22, 1, .36, 1);
+}
+
+@keyframes workspace-surface-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes workspace-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes workspace-panel-left-in {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes workspace-panel-right-in {
+  from { opacity: 0; transform: translateX(8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* No forwards fill: transformed dialogs must release their containing block. */
+  .ai-preview-dialog,
+  .save-pop-card {
+    animation: workspace-surface-in var(--motion-panel) var(--motion-ease);
+  }
+  .ai-preview-overlay,
+  .save-pop,
+  .note-board .workspace-scrim {
+    animation: workspace-backdrop-in var(--motion-fast) ease-out;
+  }
+  .ai-job-notice {
+    animation: workspace-surface-in var(--motion-notice) var(--motion-ease);
+  }
+  .ai-job-tray[open] > .ai-job-history,
+  .note-workspace-sidebar [role="tabpanel"]:not([hidden]) {
+    animation: workspace-surface-in var(--motion-panel) var(--motion-ease);
+  }
+
+  /* Colour feedback also works with keyboard focus; focus outlines stay instant. */
+  .workspace-ribbon a,
+  .tab-new,
+  .tree-item,
+  .sidebar-new,
+  .sidebar-tool-tabs button,
+  .markdown-mode-switch button,
+  .ai-job-history-item {
+    transition: background-color var(--motion-fast) ease-out,
+      color var(--motion-fast) ease-out;
+  }
+  .tree-chevron {
+    transition: transform var(--motion-fast) var(--motion-ease);
+  }
+  .community-entry {
+    transition: transform var(--motion-fast) var(--motion-ease),
+      border-color var(--motion-fast) ease-out,
+      background-color var(--motion-fast) ease-out;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) and (hover: hover) and (pointer: fine) {
+  /* Restrict movement to actions; never move graph nodes, text inputs or backdrops. */
+  :is(.editor-save, .panel-actions button, .ai-controls button,
+      .ai-preview-footer button, .ai-job-status button,
+      .save-pop-card button, .practice .row button):not(:disabled):hover {
+    transform: translateY(-1px);
+  }
+  :is(.editor-save, .panel-actions button, .ai-controls button,
+      .ai-preview-footer button, .ai-job-status button,
+      .save-pop-card button, .practice .row button):not(:disabled):active {
+    transform: translateY(1px);
+  }
+  .community-entry:not(:disabled):hover { transform: translateY(-2px); }
+  .community-entry:not(:disabled):active { transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: no-preference) and (max-width: 900px) {
+  .note-board > .rail:not([hidden]) {
+    animation: workspace-panel-left-in var(--motion-panel) var(--motion-ease);
+  }
+  .note-board > .quiz:not([hidden]) {
+    animation: workspace-panel-right-in var(--motion-panel) var(--motion-ease);
+  }
+}
+@media (prefers-reduced-motion: no-preference) and (max-width: 760px) {
+  .workspace-explorer > .topic-tree:not([hidden]) {
+    animation: workspace-panel-left-in var(--motion-panel) var(--motion-ease);
+  }
+  .workspace-explorer > .graph-panel:not([hidden]) {
+    animation: workspace-panel-right-in var(--motion-panel) var(--motion-ease);
+  }
+}
+
+/* Existing press rules in globals.css also need to rest under reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  button:not(.graph-node):active { transform: none; }
+}

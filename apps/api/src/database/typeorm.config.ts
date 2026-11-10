@@ -1,3 +1,6 @@
+import { PracticeEssays1760000000010 } from '../migrations/1760000000010-PracticeEssays';
+import { PracticeAttempt } from '../entities/practice-attempt.entity';
+import { PracticeAttemptQuestion } from '../entities/practice-attempt-question.entity';
 import { Interviews1760000000009 } from '../migrations/1760000000009-Interviews';
 import { PersonalLibraries1760000000008 } from '../migrations/1760000000008-PersonalLibraries';
 import { ImportJobs1760000000007 } from '../migrations/1760000000007-ImportJobs';
@@ -15,7 +18,15 @@ import { NoteBodyLength1760000000003 } from '../migrations/1760000000003-NoteBod
 import { SubjectGraph1760000000004 } from '../migrations/1760000000004-SubjectGraph';
 import { QuestionLang1760000000005 } from '../migrations/1760000000005-QuestionLang';
 
-export const entities = [Topic, TopicParent, Note, NoteTopic, Question];
+export const entities = [
+  PracticeAttempt,
+  PracticeAttemptQuestion,
+  Topic,
+  TopicParent,
+  Note,
+  NoteTopic,
+  Question,
+];
 
 export const migrations = [
   InitSchema1760000000001,
@@ -27,6 +38,7 @@ export const migrations = [
   ImportJobs1760000000007,
   PersonalLibraries1760000000008,
   Interviews1760000000009,
+  PracticeEssays1760000000010,
 ];
 
 export function typeormOptions(): DataSourceOptions {

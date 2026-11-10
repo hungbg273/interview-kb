@@ -52,3 +52,18 @@ export function graphLayout(roots: Topic[], children: Record<string, Topic[]>, e
   }
   return {placed,edges};
 }
+
+/** A narrow-sidebar layout: stable two-column branches with room for labels.
+ * x is a percentage; y and height are pixels so extra rows never crush text. */
+export function localTopicLayout(topic: Topic, children: Topic[]) {
+  const unique = [...new Map(children.filter(child => child.id !== topic.id).map(child => [child.id, child])).values()];
+  const rows = Math.ceil(unique.length / 2);
+  const height = unique.length ? Math.max(280, 176 + (rows - 1) * 112 + 80) : 208;
+  const root = {...topic, x:50, y:unique.length ? 56 : 76};
+  const nodes = [root, ...unique.map((child,index) => ({
+    ...child,
+    x: unique.length === 1 || (index === unique.length - 1 && unique.length % 2 !== 0) ? 50 : index % 2 === 0 ? 25 : 75,
+    y:176 + Math.floor(index / 2) * 112,
+  }))];
+  return {nodes, height, edges:nodes.slice(1).map(child => ({from:root,to:child}))};
+}

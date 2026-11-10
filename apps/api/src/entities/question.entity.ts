@@ -1,4 +1,8 @@
-import type { CorrectChoice, QuestionSource } from '@kb/shared';
+import type {
+  CorrectChoice,
+  QuestionSource,
+  RubricCriterion,
+} from '@kb/shared';
 import {
   Column,
   CreateDateColumn,
@@ -26,28 +30,38 @@ export class Question {
   @RelationId((question: Question) => question.note)
   noteId: string;
 
+  @Column({ type: 'varchar', default: 'mcq' })
+  type: 'mcq' | 'essay';
+
+  @Column({ type: 'text', nullable: true, name: 'reference_answer' })
+  referenceAnswer: string | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  rubric: RubricCriterion[] | null;
+
   @Column({ type: 'text' })
   prompt: string;
 
-  @Column({ type: 'varchar', name: 'choice_a', length: 2000 })
-  choiceA: string;
+  @Column({ type: 'varchar', name: 'choice_a', length: 2000, nullable: true })
+  choiceA: string | null;
 
-  @Column({ type: 'varchar', name: 'choice_b', length: 2000 })
-  choiceB: string;
+  @Column({ type: 'varchar', name: 'choice_b', length: 2000, nullable: true })
+  choiceB: string | null;
 
-  @Column({ type: 'varchar', name: 'choice_c', length: 2000 })
-  choiceC: string;
+  @Column({ type: 'varchar', name: 'choice_c', length: 2000, nullable: true })
+  choiceC: string | null;
 
-  @Column({ type: 'varchar', name: 'choice_d', length: 2000 })
-  choiceD: string;
+  @Column({ type: 'varchar', name: 'choice_d', length: 2000, nullable: true })
+  choiceD: string | null;
 
   @Column({
     type: 'enum',
     enum: ['A', 'B', 'C', 'D'],
     enumName: 'question_correct_choice',
     name: 'correct_choice',
+    nullable: true,
   })
-  correctChoice: CorrectChoice;
+  correctChoice: CorrectChoice | null;
 
   @Column({ type: 'text', nullable: true, name: 'explanation_markdown' })
   explanationMarkdown: string | null;

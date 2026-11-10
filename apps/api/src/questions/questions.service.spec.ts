@@ -22,9 +22,12 @@ describe('QuestionsService.create', () => {
 
   it('404 when note is missing', async () => {
     const questions = { save: jest.fn() };
-    const svc = new QuestionsService(questions as never, {
-      findById: jest.fn().mockResolvedValue(null),
-    } as never);
+    const svc = new QuestionsService(
+      questions as never,
+      {
+        findById: jest.fn().mockResolvedValue(null),
+      } as never,
+    );
     await expect(
       svc.create('missing', {
         prompt: 'Q?',
@@ -49,5 +52,30 @@ describe('QuestionsService.update', () => {
     await expect(svc.update('q1', {})).rejects.toMatchObject({
       code: 'VALIDATION',
     });
+  });
+});
+
+describe('essay creation', () => {
+  it('persists reference and rubric without MCQ fields', async () => {
+    const save = jest.fn(async (value) => value);
+    const svc = new QuestionsService(
+      { save } as never,
+      { findById: async () => ({ id: 'n' }) } as never,
+    );
+    await svc.create('n', {
+      type: 'essay',
+      prompt: 'Explain transactions',
+      referenceAnswer: 'Atomic changes',
+      rubric: [{ id: 'a', description: 'Accuracy', maxPoints: 10 }],
+      lang: 'vi',
+    } as never);
+    expect(save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'essay',
+        referenceAnswer: 'Atomic changes',
+        choiceA: null,
+        correctChoice: null,
+      }),
+    );
   });
 });

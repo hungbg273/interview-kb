@@ -20,13 +20,13 @@ describe('LoginPage', () => {
   it('links the Google button to the API OAuth start URL', () => {
     render(<LoginPage />);
 
-    expect(screen.getByRole('button', { name: 'Đăng nhập bằng Google' })).toBeInTheDocument();
+    expect(screen.queryByRole('button')).toBeNull();
     expect(screen.getByRole('link')).toHaveAttribute(
       'href',
       'http://localhost:4000/auth/google',
     );
     expect(
-      screen.queryByText('Email Google không nằm trong whitelist.'),
+      screen.queryByText('Email Google này chưa được cấp quyền truy cập.'),
     ).not.toBeInTheDocument();
   });
 
@@ -35,7 +35,7 @@ describe('LoginPage', () => {
     render(<LoginPage />);
 
     expect(
-      screen.getByText('Email Google không nằm trong whitelist.'),
+      screen.getByText('Email Google này chưa được cấp quyền truy cập.'),
     ).toBeInTheDocument();
   });
 });

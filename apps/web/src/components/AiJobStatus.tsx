@@ -46,7 +46,7 @@ export function AiJobStatus({
           {busy ? "Đang tải…" : "Xem kết quả"}
         </button>
       )}
-      {job.status === "failed" && (
+      {job.status === "failed" && job.action !== "grade-practice-answer" && (
         <button
           type="button"
           disabled={busy}
@@ -54,6 +54,11 @@ export function AiJobStatus({
         >
           Tạo yêu cầu mới
         </button>
+      )}
+      {job.action === "grade-practice-answer" && job.attemptId && (
+        <a href={`/practice?attempt=${encodeURIComponent(job.attemptId)}`}>
+          Mở bài luyện tập
+        </a>
       )}
       {error && (
         <p role="alert" className="error">

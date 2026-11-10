@@ -22,3 +22,29 @@ describe('graphLayout', () => {
     expect(graphLayout([],{},{}).placed.size).toBe(0);
   });
 });
+
+import { localTopicLayout } from './graph-layout';
+describe('localTopicLayout', () => {
+  const root = {id:'root',name:'Mạng máy tính'};
+  it('centres a single topic and avoids inventing edges', () => {
+    const layout=localTopicLayout(root,[]);
+    expect(layout.nodes).toEqual([expect.objectContaining({id:'root',x:50})]);
+    expect(layout.edges).toEqual([]);
+  });
+  it('keeps all children distinct, spaced and inside the scrollable canvas', () => {
+    const children=Array.from({length:20},(_,i)=>({id:String(i),name:'Chủ đề '+i}));
+    const layout=localTopicLayout(root,[root,...children,children[0]]);
+    expect(layout.nodes).toHaveLength(21);
+    expect(layout.edges).toHaveLength(20);
+    for(const node of layout.nodes) {
+      expect(node.y).toBeGreaterThanOrEqual(44);
+      expect(node.y+64).toBeLessThanOrEqual(layout.height);
+      expect(node.x).toBeGreaterThanOrEqual(25);
+      expect(node.x).toBeLessThanOrEqual(75);
+    }
+    for(let i=1;i<layout.nodes.length;i++) for(let j=i+1;j<layout.nodes.length;j++) {
+      const a=layout.nodes[i],b=layout.nodes[j];
+      expect(Math.abs(a.x-b.x)>=50 || Math.abs(a.y-b.y)>=112).toBe(true);
+    }
+  });
+});

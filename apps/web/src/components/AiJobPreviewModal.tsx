@@ -10,10 +10,12 @@ import { WorkspaceLink } from "./WorkspaceNavigation";
 type PreviewQuestion = {
   id: string;
   prompt: string;
-  choiceA?: string;
-  choiceB?: string;
-  choiceC?: string;
-  choiceD?: string;
+  type?: "mcq" | "essay";
+  referenceAnswer?: string;
+  choiceA?: string | null;
+  choiceB?: string | null;
+  choiceC?: string | null;
+  choiceD?: string | null;
 };
 export function AiJobPreviewModal({
   job,
@@ -190,6 +192,14 @@ export function AiJobPreviewModal({
           </button>
         </header>
         <div className="ai-preview-content" aria-busy={loading}>
+          {job.action === "grade-practice-answer" && job.attemptId && (
+            <a
+              href={`/practice?attempt=${encodeURIComponent(job.attemptId)}`}
+              onClick={onClose}
+            >
+              Mở bài luyện tập để xem kết quả hoặc chấm lại câu lỗi
+            </a>
+          )}
           {loading && <p role="status">Đang tải kết quả…</p>}
           {error && (
             <p role="alert" className="banner">
@@ -216,21 +226,28 @@ export function AiJobPreviewModal({
               <h3>
                 {index + 1}. {q.prompt}
               </h3>
-              <ol type="A">
-                {[q.choiceA, q.choiceB, q.choiceC, q.choiceD].map(
-                  (choice, i) => (
-                    <li key={i}>{choice}</li>
-                  ),
-                )}
-              </ol>
+              <div>
+                {q.type === "essay" && <p>Tự luận — {q.referenceAnswer}</p>}
+                <ol type="A">
+                  {[q.choiceA, q.choiceB, q.choiceC, q.choiceD]
+                    .filter(Boolean)
+                    .map((choice, i) => (
+                      <li key={i}>{choice}</li>
+                    ))}
+                </ol>
+              </div>
             </article>
           ))}
-          {!loading && result && !result.markdown && !questions.length && (
-            <p>
-              Không có nội dung xem trước. Câu hỏi có thể đã được chỉnh sửa hoặc
-              xóa.
-            </p>
-          )}
+          {!loading &&
+            result &&
+            !result.markdown &&
+            !questions.length &&
+            job.action !== "grade-practice-answer" && (
+              <p>
+                Không có nội dung xem trước. Câu hỏi có thể đã được chỉnh sửa
+                hoặc xóa.
+              </p>
+            )}
           {applied && <p role="status">Đã áp dụng vào ghi chú.</p>}
         </div>
         <footer className="ai-preview-footer">

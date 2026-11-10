@@ -11,14 +11,13 @@ function LoginInner() {
   return (
     <main className="login-wrap">
       <section className="login-card">
+      <p className="login-brand">Interview Knowledge Base</p>
       <h1>Đăng nhập</h1>
-      <p className="lede">Sổ ghi chú phỏng vấn, chỉ dành cho email trong whitelist.</p>
+      <p className="lede">Ghi chú kiến thức và luyện tập phỏng vấn. Sử dụng email đã được cấp quyền để tiếp tục.</p>
       {forbidden && (
-        <p className="error">Email Google không nằm trong whitelist.</p>
+        <p className="error" role="alert">Email Google này chưa được cấp quyền truy cập.</p>
       )}
-      <a href={`${API_URL}/auth/google`}>
-        <button type="button">Đăng nhập bằng Google</button>
-      </a>
+      <a className="login-action" href={`${API_URL}/auth/google`}>Đăng nhập bằng Google</a>
       </section>
     </main>
   );

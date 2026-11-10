@@ -35,7 +35,10 @@ describe('AiService', () => {
     const llm = { complete: jest.fn().mockResolvedValue('short summary') };
     const svc = new AiService(notes as never, questions as never, llm as never);
 
-    const result = await svc.run('n1', { action: 'summarize', provider: 'openai' });
+    const result = await svc.run('n1', {
+      action: 'summarize',
+      provider: 'openai',
+    });
 
     expect(result).toEqual({ markdown: 'short summary' });
     expect(notes.save).not.toHaveBeenCalled();
@@ -52,7 +55,10 @@ describe('AiService', () => {
     const llm = { complete: jest.fn().mockResolvedValue('longer note') };
     const svc = new AiService(notes as never, questions as never, llm as never);
 
-    const result = await svc.run('n1', { action: 'expand', provider: 'openai' });
+    const result = await svc.run('n1', {
+      action: 'expand',
+      provider: 'openai',
+    });
 
     expect(result).toEqual({ markdown: 'longer note' });
     expect(notes.save).not.toHaveBeenCalled();
@@ -75,10 +81,19 @@ describe('AiService', () => {
       ),
     };
     const svc = new AiService(notes as never, questions as never, llm as never);
-    await svc.run('n1', { action: 'generate-questions', provider: 'openai', targetLang: 'en' });
+    await svc.run('n1', {
+      action: 'generate-questions',
+      provider: 'openai',
+      targetLang: 'en',
+    });
     expect(questions.save).toHaveBeenCalledTimes(1);
     expect(questions.save).toHaveBeenCalledWith(
-      expect.objectContaining({ prompt: 'Q1', source: 'ai', correctChoice: 'A', lang: 'en' }),
+      expect.objectContaining({
+        prompt: 'Q1',
+        source: 'ai',
+        correctChoice: 'A',
+        lang: 'en',
+      }),
     );
   });
 
@@ -98,7 +113,12 @@ describe('AiService', () => {
       ),
     };
     const svc = new AiService(notes as never, questions as never, llm as never);
-    await svc.run('n1', { action: 'generate-questions', provider: 'openai', count: 8, targetLang: 'en' });
+    await svc.run('n1', {
+      action: 'generate-questions',
+      provider: 'openai',
+      count: 8,
+      targetLang: 'en',
+    });
     expect(questions.save).toHaveBeenCalledTimes(8);
   });
 
@@ -141,7 +161,9 @@ describe('AiService', () => {
       listRecentAiByNote: jest.fn().mockResolvedValue([]),
     };
     const llm = {
-      complete: jest.fn().mockResolvedValue(JSON.stringify({ items: [validMcq('Q1')] })),
+      complete: jest
+        .fn()
+        .mockResolvedValue(JSON.stringify({ items: [validMcq('Q1')] })),
     };
     const svc = new AiService(notes as never, questions as never, llm as never);
     await svc.run('n1', {
@@ -181,10 +203,17 @@ describe('AiService', () => {
       listRecentAiByNote: jest.fn().mockResolvedValue([]),
     };
     const llm = {
-      complete: jest.fn().mockResolvedValue(JSON.stringify({ items: [validMcq('Q1')] })),
+      complete: jest
+        .fn()
+        .mockResolvedValue(JSON.stringify({ items: [validMcq('Q1')] })),
     };
     const svc = new AiService(notes as never, questions as never, llm as never);
-    await svc.run('n1', { action: 'generate-questions', provider: 'openai', count: 1, targetLang: 'en' });
+    await svc.run('n1', {
+      action: 'generate-questions',
+      provider: 'openai',
+      count: 1,
+      targetLang: 'en',
+    });
 
     expect(llm.complete).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -205,8 +234,15 @@ describe('AiService', () => {
       save: jest.fn(),
     };
     const llm = { complete: jest.fn().mockResolvedValue('# Draft') };
-    const svc = new AiService(notes as never, { save: jest.fn() } as never, llm as never);
-    const result = await svc.run('n1', { action: 'generate-content', provider: 'openai' });
+    const svc = new AiService(
+      notes as never,
+      { save: jest.fn() } as never,
+      llm as never,
+    );
+    const result = await svc.run('n1', {
+      action: 'generate-content',
+      provider: 'openai',
+    });
     expect(result).toEqual({ markdown: '# Draft' });
     expect(notes.save).not.toHaveBeenCalled();
   });
@@ -218,7 +254,11 @@ describe('AiService', () => {
       save: jest.fn(),
     };
     const llm = { complete: jest.fn().mockResolvedValue('TCP is reliable') };
-    const svc = new AiService(notes as never, { save: jest.fn() } as never, llm as never);
+    const svc = new AiService(
+      notes as never,
+      { save: jest.fn() } as never,
+      llm as never,
+    );
     const result = await svc.run('n1', {
       action: 'translate-note',
       provider: 'openai',
@@ -235,7 +275,11 @@ describe('AiService', () => {
   it('throws NOT_FOUND when the note is missing', async () => {
     const notes = { findById: jest.fn().mockResolvedValue(null) };
     const llm = { complete: jest.fn() };
-    const svc = new AiService(notes as never, { save: jest.fn() } as never, llm as never);
+    const svc = new AiService(
+      notes as never,
+      { save: jest.fn() } as never,
+      llm as never,
+    );
     await expect(
       svc.run('missing', { action: 'summarize', provider: 'openai' }),
     ).rejects.toMatchObject({ code: ERROR_CODES.NOT_FOUND });
@@ -256,24 +300,121 @@ describe('AiService', () => {
   });
 });
 
-describe('Markdown result format',()=>{
- it.each(['summarize','expand','generate-content','translate-note'] as const)('captures Markdown and Mermaid instructions for %s',async(action)=>{
-  const svc=new AiService({findById:jest.fn().mockResolvedValue({id:'n1',title:'TCP',bodyMarkdown:'Body'})} as never,{} as never,{} as never);
-  const prepared=await svc.prepare('n1',{action,provider:'chatgpt',targetLang:'vi'});
-  expect(prepared.system).toContain('```mermaid');
-  expect(prepared.system).toContain('Do not wrap the entire response');
- });
+describe('Markdown result format', () => {
+  it.each([
+    'summarize',
+    'expand',
+    'generate-content',
+    'translate-note',
+  ] as const)(
+    'captures Markdown and Mermaid instructions for %s',
+    async (action) => {
+      const svc = new AiService(
+        {
+          findById: jest
+            .fn()
+            .mockResolvedValue({
+              id: 'n1',
+              title: 'TCP',
+              bodyMarkdown: 'Body',
+            }),
+        } as never,
+        {} as never,
+        {} as never,
+      );
+      const prepared = await svc.prepare('n1', {
+        action,
+        provider: 'chatgpt',
+        targetLang: 'vi',
+      });
+      expect(prepared.system).toContain('```mermaid');
+      expect(prepared.system).toContain('Do not wrap the entire response');
+    },
+  );
 });
 
-it('keeps structured question prompts free of Markdown output instructions',async()=>{
- const svc=new AiService({findById:jest.fn().mockResolvedValue({id:'n1',title:'TCP',bodyMarkdown:'Body'})} as never,{listByNote:jest.fn().mockResolvedValue([]),listRecentAiByNote:jest.fn().mockResolvedValue([])} as never,{} as never);
- const prepared=await svc.prepare('n1',{action:'generate-questions',provider:'chatgpt',targetLang:'vi'});
- expect(prepared.system).toContain('Return JSON');
- expect(prepared.system).not.toContain('Return Markdown content only');
+it('keeps structured question prompts free of Markdown output instructions', async () => {
+  const svc = new AiService(
+    {
+      findById: jest
+        .fn()
+        .mockResolvedValue({ id: 'n1', title: 'TCP', bodyMarkdown: 'Body' }),
+    } as never,
+    {
+      listByNote: jest.fn().mockResolvedValue([]),
+      listRecentAiByNote: jest.fn().mockResolvedValue([]),
+    } as never,
+    {} as never,
+  );
+  const prepared = await svc.prepare('n1', {
+    action: 'generate-questions',
+    provider: 'chatgpt',
+    targetLang: 'vi',
+  });
+  expect(prepared.system).toContain('Return JSON');
+  expect(prepared.system).not.toContain('Return Markdown content only');
 });
 
-it.each(['expand','generate-content'] as const)('captures a 20000-token output budget for %s jobs',async(action)=>{
- const svc=new AiService({findById:jest.fn().mockResolvedValue({id:'n1',title:'NestJS request lifecycle',bodyMarkdown:'Lifecycle'})} as never,{} as never,{} as never);
- const prepared=await svc.prepare('n1',{action,provider:'deepseek'});
- expect(prepared.maxTokens).toBe(20000);
+it.each(['expand', 'generate-content'] as const)(
+  'captures a 20000-token output budget for %s jobs',
+  async (action) => {
+    const svc = new AiService(
+      {
+        findById: jest
+          .fn()
+          .mockResolvedValue({
+            id: 'n1',
+            title: 'NestJS request lifecycle',
+            bodyMarkdown: 'Lifecycle',
+          }),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    const prepared = await svc.prepare('n1', { action, provider: 'deepseek' });
+    expect(prepared.maxTokens).toBe(20000);
+  },
+);
+
+it('generates and persists essay references and rubrics', async () => {
+  const essay = {
+    type: 'essay',
+    prompt: 'Explain',
+    referenceAnswer: 'Reference',
+    rubric: [{ id: 'a', description: 'Accuracy', maxPoints: 10 }],
+  };
+  const questions = {
+    listByNote: async () => [],
+    listRecentAiByNote: async () => [],
+    save: jest.fn(),
+  };
+  const complete = jest
+    .fn()
+    .mockResolvedValue(JSON.stringify({ items: [essay] }));
+  const svc = new AiService(
+    {
+      findById: async () => ({
+        title: 'Transactions',
+        bodyMarkdown: 'Atomic changes',
+      }),
+    } as never,
+    questions as never,
+    { complete } as never,
+  );
+  await svc.run('n', {
+    action: 'generate-questions',
+    provider: 'openai',
+    targetLang: 'vi',
+    questionType: 'essay',
+    count: 1,
+  });
+  expect(questions.save).toHaveBeenCalledWith(
+    expect.objectContaining({
+      type: 'essay',
+      correctChoice: null,
+      referenceAnswer: 'Reference',
+      rubric: essay.rubric,
+    }),
+  );
+  expect(complete.mock.calls[0][0].system).toContain('rubric');
 });

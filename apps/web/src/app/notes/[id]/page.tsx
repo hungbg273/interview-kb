@@ -16,19 +16,14 @@ import { useNoteList } from "@/components/NotesProvider";
 import { NoteEditor } from "@/components/NoteEditor";
 import { QuestionForm } from "@/components/QuestionForm";
 import { api, ApiError } from "@/lib/api";
-import {
-  AiDifficulty,
-  AiLang,
-  AiProvider,
-  CreateQuestionBody,
-} from "@kb/shared";
+import { AiDifficulty, AiLang, AiProvider, QuestionInput } from "@kb/shared";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-type Question = CreateQuestionBody & { id: string };
+type Question = QuestionInput & { id: string };
 type TopicChip = { id: string; name: string };
 
-const emptyForm: CreateQuestionBody = {
+const emptyForm: QuestionInput = {
   prompt: "",
   choiceA: "",
   choiceB: "",
@@ -54,7 +49,7 @@ function EditNote() {
   const latestDraft = useRef({ dirty, id });
   latestDraft.current = { dirty, id };
   const [questions, setQuestions] = useState<Question[]>([]);
-  const [form, setForm] = useState<CreateQuestionBody>(emptyForm);
+  const [form, setForm] = useState<QuestionInput>(emptyForm);
   const [provider, setProvider] = useState<AiProvider>("chatgpt");
   const [lastRun, setLastRun] = useState<AiRunPayload>({ action: "summarize" });
   const [questionCount, setQuestionCount] = useState(5);
@@ -310,8 +305,11 @@ function EditNote() {
               <ul className="question-list">
                 {questions.map((q) => (
                   <li key={q.id}>
-                    {q.prompt} — đúng: {q.correctChoice} —{" "}
-                    {q.lang === "en" ? "EN" : "VI"}{" "}
+                    {q.prompt} —{" "}
+                    {q.type === "essay"
+                      ? "Tự luận"
+                      : `đúng: ${q.correctChoice}`}{" "}
+                    — {q.lang === "en" ? "EN" : "VI"}{" "}
                     <button
                       type="button"
                       className="ghost"

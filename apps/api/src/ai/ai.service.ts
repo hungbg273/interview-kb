@@ -1,3 +1,5 @@
+import { questionFields, ESSAY_FORMAT } from '../questions/question-fields';
+import { isValidQuestion, type QuestionInput } from '@kb/shared';
 import { MARKDOWN_FORMAT } from './prompts/markdown-format';
 export type AiPreparedRequest = {
   provider: import('@kb/shared').AiProvider;
@@ -11,7 +13,7 @@ export type AiPreparedRequest = {
   style?: string;
 };
 import { Injectable } from '@nestjs/common';
-import { isValidMcq, type AiLang, type CreateQuestionBody } from '@kb/shared';
+import { type AiLang } from '@kb/shared';
 import { AppError } from '../common/app-error';
 import { NotesRepository } from '../database/notes.repository';
 import { QuestionsRepository } from '../database/questions.repository';
@@ -216,27 +218,25 @@ export class AiService {
       env,
       json: true,
       temperature: 0.4,
-      maxTokens: 2000,
-      system: `You are an interview coach. Use only the note. Return JSON {"items":[...]}. Exactly ${count} items. Language: ${LANG[lang]}. Difficulty: ${difficulty} (easy=recall, medium=apply, hard=trade-off or debug). Each item: prompt, choiceA, choiceB, choiceC, choiceD, correctChoice (A|B|C|D), explanationMarkdown (1-3 sentences). Exactly one correctChoice. Plausible distractors. Do not invent APIs or RFCs. Do not repeat existing question stems.`,
+      maxTokens: dto.questionType === 'essay' ? 6000 : 2000,
+      system: `You are an interview coach. Use only the note. Return JSON {"items":[...]}. Exactly ${count} items. Language: ${LANG[lang]}. Difficulty: ${difficulty} (easy=recall, medium=apply, hard=trade-off or debug). Each item: ${dto.questionType === 'essay' ? ESSAY_FORMAT : 'type=mcq, prompt, choiceA, choiceB, choiceC, choiceD, correctChoice (A|B|C|D), explanationMarkdown (1-3 sentences). Exactly one correctChoice. Plausible distractors.'} Do not invent APIs or RFCs. Do not repeat existing question stems.`,
       user,
     });
 
     if (preparing) return [];
     const list = parseLlmJsonArray(raw);
     const valid = list
-      .filter((item): item is CreateQuestionBody => isValidMcq(item as never))
+      .filter(
+        (item): item is QuestionInput =>
+          isValidQuestion(item) &&
+          (item.type ?? 'mcq') === (dto.questionType ?? 'mcq'),
+      )
       .slice(0, count);
 
     for (const item of valid) {
       const question = new Question();
       question.note = { id: noteId } as Note;
-      question.prompt = item.prompt.trim();
-      question.choiceA = item.choiceA.trim();
-      question.choiceB = item.choiceB.trim();
-      question.choiceC = item.choiceC.trim();
-      question.choiceD = item.choiceD.trim();
-      question.correctChoice = item.correctChoice;
-      question.explanationMarkdown = item.explanationMarkdown?.trim() || null;
+      Object.assign(question, questionFields(item));
       question.lang = lang;
       question.source = 'ai';
       await this.questions.save(question);

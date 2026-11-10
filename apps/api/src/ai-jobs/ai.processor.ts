@@ -23,7 +23,7 @@ export class AiProcessor extends WorkerHost {
     const row = await this.jobs.begin(job.data.jobId);
     if (!row) return;
     try {
-      if (!row.output) await this.jobs.generate(row);
+      if (!row.output && (await this.jobs.generate(row)) === false) return;
       await this.jobs.finalize(row.id);
       this.logger.log(
         JSON.stringify({

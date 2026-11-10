@@ -55,7 +55,7 @@ it("reloads saved note data and the sidebar list without replacing the document"
     target: { value: "New title" },
   });
   fireEvent.click(screen.getByRole("button", { name: "Lưu" }));
-  await screen.findByRole("dialog", { name: "Đã lưu" });
+  await screen.findByText("Đã lưu");
   expect(screen.getByLabelText("Tiêu đề")).toHaveValue("NEW TITLE");
   expect(screen.getByRole("link", { name: "NEW TITLE" })).toBeInTheDocument();
   expect(

@@ -20,12 +20,34 @@ export function SubjectExplorer() {
   const refreshSharedNotes = useRefreshNotes();
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
+  const [narrow, setNarrow] = useState(false);
+  const leftPanel = useRef<HTMLElement>(null), rightPanel = useRef<HTMLElement>(null), stage = useRef<HTMLElement>(null);
+  const leftToggle = useRef<HTMLButtonElement>(null), rightToggle = useRef<HTMLButtonElement>(null);
+  const lastPanel = useRef<'left' | 'right'>('left');
   useEffect(() => {
-    if (window.matchMedia?.('(max-width: 760px)').matches) {
-      setLeftOpen(false);
-      setRightOpen(false);
-    }
+    const media = window.matchMedia?.('(max-width: 760px)');
+    if (!media) return;
+    const update = ({matches}: {matches:boolean}) => {
+      setNarrow(matches);
+      if (matches) { setLeftOpen(false); setRightOpen(false); }
+    };
+    update(media); media.addEventListener?.('change', update);
+    return () => media.removeEventListener?.('change', update);
   }, []);
+  useEffect(() => {
+    const overlay = narrow && (leftOpen || rightOpen);
+    stage.current?.toggleAttribute('inert', overlay);
+    if (overlay) (leftOpen ? leftPanel : rightPanel).current?.focus();
+  }, [narrow, leftOpen, rightOpen]);
+  function togglePanel(side: 'left' | 'right') {
+    lastPanel.current = side;
+    if (side === 'left') { setLeftOpen(v => !v); if (narrow) setRightOpen(false); }
+    else { setRightOpen(v => !v); if (narrow) setLeftOpen(false); }
+  }
+  function closePanels() {
+    setLeftOpen(false); setRightOpen(false);
+    (lastPanel.current === 'left' ? leftToggle : rightToggle).current?.focus();
+  }
   const [roots, setRoots] = useState<Topic[]>([]);
   const [children, setChildren] = useState<Record<string, Topic[]>>({});
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -33,6 +55,8 @@ export function SubjectExplorer() {
   const [selectedName, setSelectedName] = useState('Chưa gán chủ đề');
   const [loadingNotes, setLoadingNotes] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const [reload, setReload] = useState(0);
+  const [rootError, setRootError] = useState('');
   const [dirtyNotes, setDirtyNotes] = useState<Set<string>>(new Set());
   useUnsavedChanges(dirtyNotes.size > 0);
   const markDirty = useCallback((id: string, dirty: boolean) => setDirtyNotes(prev => { const next = new Set(prev); if (dirty) next.add(id); else next.delete(id); return next; }), []);
@@ -41,12 +65,19 @@ export function SubjectExplorer() {
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
   const [q, setQ] = useState('');
+  const [searchError, setSearchError] = useState('');
+  const [searchRetry, setSearchRetry] = useState(0);
   const [hits, setHits] = useState<SearchHit | null>(null);
   const [picker, setPicker] = useState<'note' | 'parent' | null>(null);
+  const [pickerTarget, setPickerTarget] = useState<string | null>(null);
+  const [pickerError, setPickerError] = useState('');
+  const [pickerBusy, setPickerBusy] = useState(false);
   const [pickerItems, setPickerItems] = useState<Array<{ id: string; label: string }>>([]);
 
   const loadRoots = useCallback(async () => {
-    setRoots(await api<Topic[]>('/topics'));
+    setRootError('');
+    try { setRoots(await api<Topic[]>('/topics')); }
+    catch { setRootError('Không tải được danh sách chủ đề.'); }
   }, []);
 
   useEffect(() => {
@@ -61,7 +92,7 @@ export function SubjectExplorer() {
       .catch(() => { if (!cancelled) setLoadError('Không tải được ghi chú.'); })
       .finally(() => { if (!cancelled) setLoadingNotes(false); });
     return () => { cancelled = true; };
-  }, [selected]);
+  }, [selected, reload]);
 
   useEffect(() => {
     const topicId = new URLSearchParams(window.location.search).get('topicId');
@@ -75,6 +106,8 @@ export function SubjectExplorer() {
 
   useEffect(() => {
     const query = q.trim();
+    setSearchError('');
+    setHits(null);
     if (!query) {
       setHits(null);
       return;
@@ -82,11 +115,11 @@ export function SubjectExplorer() {
     let cancelled = false;
     void api<SearchHit>(`/search?q=${encodeURIComponent(query)}`).then((data) => {
       if (!cancelled) setHits(data);
-    });
+    }).catch(() => { if (!cancelled) setSearchError('Không tìm kiếm được. Hãy thử lại.'); });
     return () => {
       cancelled = true;
     };
-  }, [q]);
+  }, [q, searchRetry]);
 
   async function toggle(topic: Topic) {
     if (topic.id !== selected && !canLeaveTopic()) return;
@@ -105,59 +138,74 @@ export function SubjectExplorer() {
   }
 
   const filtering = q.trim().length > 0;
-  async function addChild(parentId: string) {
-    const name = window.prompt('Tên chủ đề con');
-    if (!name?.trim()) return;
-    await api('/topics', {
-      method: 'POST',
-      body: JSON.stringify({ name: name.trim(), parentIds: [parentId] }),
-    });
-    const next = await api<Topic[]>(`/topics?parentId=${parentId}`);
-    setChildren((prev) => ({ ...prev, [parentId]: next }));
-    setExpanded((prev) => ({ ...prev, [parentId]: true }));
-    await loadRoots();
+  const [topicForm, setTopicForm] = useState<{kind:'root'|'child'|'parent'; target?:string} | null>(null);
+  const [topicName, setTopicName] = useState('');
+  const [topicError, setTopicError] = useState('');
+  const [topicBusy, setTopicBusy] = useState(false);
+  const nameInput = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (topicForm) nameInput.current?.focus(); }, [topicForm]);
+  function openTopicForm(kind:'root'|'child'|'parent', target?:string) {
+    if (narrow) { setLeftOpen(false); setRightOpen(false); }
+    setTopicName(''); setTopicError(''); setTopicForm({kind,target});
+  }
+  async function submitTopic() {
+    if (!topicForm || topicBusy || !topicName.trim()) return;
+    setTopicBusy(true); setTopicError('');
+    try {
+      if (topicForm.kind === 'parent') {
+        const data = await api<SearchHit>(`/search?q=${encodeURIComponent(topicName.trim())}`);
+        const options = data.topics.filter(t => t.id !== topicForm.target);
+        if (!options.length) { setTopicError('Không tìm thấy chủ đề phù hợp.'); return; }
+        setPickerItems(options.map(t => ({id:t.id,label:t.name})));
+        setPickerTarget(topicForm.target ?? null); setPickerError('');
+        setPicker('parent');
+      } else {
+        await api('/topics', {method:'POST',body:JSON.stringify({name:topicName.trim(), ...(topicForm.target ? {parentIds:[topicForm.target]} : {})})});
+        const target = topicForm.target;
+        setTopicForm(null);
+        if (target) {
+          try {
+            const next = await api<Topic[]>(`/topics?parentId=${target}`);
+            setChildren(prev => ({...prev,[target]:next}));
+            setExpanded(prev => ({...prev,[target]:true}));
+          } catch { setLoadError('Chủ đề đã tạo, nhưng chưa tải lại được danh sách.'); }
+        }
+        await loadRoots();
+      }
+      setTopicForm(null);
+    } catch { setTopicError('Không hoàn tất được yêu cầu. Nội dung nhập vẫn được giữ, hãy thử lại.'); }
+    finally { setTopicBusy(false); }
   }
 
   async function openAttach(topicId: string) {
-    const data = await api<{ items: Note[] }>('/notes');
-    setSelected(topicId);
-    setPicker('note');
-    setPickerItems(data.items.map((n) => ({ id: n.id, label: n.title })));
-  }
-
-  async function openParent(childId: string) {
-    const qName = window.prompt('Tên chủ đề cha (tìm gần đúng)');
-    if (!qName?.trim()) return;
-    const data = await api<SearchHit>(`/search?q=${encodeURIComponent(qName.trim())}`);
-    const options = data.topics.filter((t) => t.id !== childId);
-    if (options.length === 0) {
-      window.alert('Không tìm thấy chủ đề');
-      return;
-    }
-    setSelected(childId);
-    setPicker('parent');
-    setPickerItems(options.map((t) => ({ id: t.id, label: t.name })));
+    if (narrow) { setLeftOpen(false); setRightOpen(false); }
+    setPickerTarget(topicId); setPicker('note'); setPickerError(''); setPickerItems([]); setPickerBusy(true);
+    try {
+      const data = await api<{ items: Note[] }>('/notes');
+      setPickerItems(data.items.map(n => ({id:n.id,label:n.title})));
+    } catch { setPickerError('Không tải được ghi chú. Hãy đóng bảng và thử lại.'); }
+    finally { setPickerBusy(false); }
   }
 
   async function pick(id: string) {
-    if (picker === 'note' && selected !== UNCATEGORIZED) {
-      const note = await api<{ topicIds: string[] }>(`/notes/${id}`);
-      const topicIds = Array.from(new Set([...(note.topicIds ?? []), selected]));
-      await api(`/notes/${id}/topics`, {
-        method: 'PUT',
-        body: JSON.stringify({ topicIds }),
-      });
-      const data = await api<{ items: Note[] }>(`/notes?topicId=${selected}`);
-      setNotes(data.items);
-    }
-    if (picker === 'parent' && selected !== UNCATEGORIZED) {
-      await api(`/topics/${selected}/parents`, {
-        method: 'POST',
-        body: JSON.stringify({ parentId: id }),
-      });
-      await loadRoots();
-    }
-    setPicker(null);
+    if (!pickerTarget || pickerBusy) return;
+    const target = pickerTarget;
+    setPickerBusy(true); setPickerError('');
+    try {
+      if (picker === 'note') {
+        const note = await api<{topicIds:string[]}>(`/notes/${id}`);
+        const topicIds = Array.from(new Set([...(note.topicIds ?? []), target]));
+        await api(`/notes/${id}/topics`, {method:'PUT',body:JSON.stringify({topicIds})});
+        const data = await api<{items:Note[]}>(`/notes?topicId=${target}`);
+        if (selectedRef.current === target) setNotes(data.items);
+        setPicker(null);
+      } else {
+        await api(`/topics/${target}/parents`, {method:'POST',body:JSON.stringify({parentId:id})});
+        setPicker(null);
+        await loadRoots();
+      }
+    } catch { setPickerError('Không hoàn tất được yêu cầu. Hãy thử lại.'); }
+    finally { setPickerBusy(false); }
   }
 
   async function reloadNotes() {
@@ -199,22 +247,24 @@ export function SubjectExplorer() {
   }
 
   return (
-    <main className={`explorer workspace-explorer${leftOpen ? '' : ' left-closed'}${rightOpen ? '' : ' right-closed'}`}>
+    <main className={`explorer workspace-explorer${leftOpen ? '' : ' left-closed'}${rightOpen ? '' : ' right-closed'}`} onKeyDown={event => { if (event.key === 'Escape') { closePanels(); } }}>
       <div className="workspace-tabbar">
-        <button type="button" className="icon-button" aria-label={leftOpen ? 'Ẩn cây chủ đề' : 'Hiện cây chủ đề'} aria-expanded={leftOpen} aria-controls="topic-tree" onClick={() => setLeftOpen(!leftOpen)}><WorkspaceIcon name="panel" /></button>
-        <div className="workspace-tab"><WorkspaceIcon name="note" /> {selectedName}</div>
+        <button type="button" className="icon-button" aria-label={leftOpen ? 'Ẩn cây chủ đề' : 'Hiện cây chủ đề'} aria-expanded={leftOpen} aria-controls="topic-tree" ref={leftToggle} onClick={() => togglePanel('left')}><WorkspaceIcon name="panel" /></button>
+        <div className="workspace-tab"><WorkspaceIcon name="note" /> <span title={selectedName}>{selectedName}</span></div>
         <WorkspaceLink className="tab-new" href="/notes/new" aria-label="Tạo ghi chú mới" title="Tạo ghi chú mới"><WorkspaceIcon name="plus" /></WorkspaceLink>
-        <button type="button" className="icon-button right-toggle" aria-label={rightOpen ? 'Ẩn thông tin chủ đề' : 'Hiện thông tin chủ đề'} aria-expanded={rightOpen} aria-controls="topic-details" onClick={() => setRightOpen(!rightOpen)}><WorkspaceIcon name="panel" /></button>
+        <button type="button" className="icon-button right-toggle" aria-label={rightOpen ? 'Ẩn thông tin chủ đề' : 'Hiện thông tin chủ đề'} aria-expanded={rightOpen} aria-controls="topic-details" ref={rightToggle} onClick={() => togglePanel('right')}><WorkspaceIcon name="panel" /></button>
       </div>
-      <nav id="topic-tree" className="topic-tree" aria-label="Cây chủ đề" hidden={!leftOpen}>
+      {narrow && (leftOpen || rightOpen) && <button className="workspace-scrim" type="button" tabIndex={-1} aria-label="Đóng bảng bên" onClick={closePanels} />}
+      <nav ref={leftPanel} tabIndex={-1} id="topic-tree" className="topic-tree" aria-label="Cây chủ đề" hidden={!leftOpen}>
         <div className="sidebar-heading"><WorkspaceIcon name="folder" /><span>Không gian kiến thức</span></div>
         <p className="sidebar-caption">CHỦ ĐỀ</p>
         <button type="button" className={`tree-item${selected === UNCATEGORIZED ? ' selected' : ''}`} aria-label="Mở ghi chú chưa gán chủ đề" onClick={() => { if (!canLeaveTopic()) return; setDirtyNotes(new Set()); setSelected(UNCATEGORIZED); setSelectedName('Chưa gán chủ đề'); setQ(''); }}><WorkspaceIcon name="note" /><span>Chưa gán chủ đề</span></button>
+        {rootError && <p role="alert" className="error">{rootError} <button type="button" className="ghost" onClick={() => void loadRoots()}>Thử lại</button></p>}
         <ul className="topic-tree-list">{topicBranch(filtering && hits ? hits.topics : roots)}</ul>
         <WorkspaceLink className="sidebar-new" href="/notes/new"><WorkspaceIcon name="plus" /> Ghi chú mới</WorkspaceLink>
         <div className="sidebar-foot"><span className="session-dot" /> Kho kiến thức cá nhân</div>
       </nav>
-      <section className="topic-content" aria-label="Nội dung chủ đề">
+      <section ref={stage} className="topic-content" aria-label="Nội dung chủ đề">
         <div className="content-breadcrumb">Không gian kiến thức <span>/</span> {selectedName}</div>
         <div className="row">
           <input
@@ -227,18 +277,19 @@ export function SubjectExplorer() {
           <button
             type="button"
             className="ghost"
-            onClick={() => {
-              const name = window.prompt('Tên chủ đề gốc');
-              if (!name?.trim()) return;
-              void api('/topics', {
-                method: 'POST',
-                body: JSON.stringify({ name: name.trim() }),
-              }).then(() => loadRoots());
-            }}
+            onClick={() => openTopicForm('root')}
           >
             Thêm chủ đề gốc
           </button>
         </div>
+        {searchError && <p className="error" role="alert">{searchError} <button type="button" className="ghost" onClick={() => setSearchRetry(v => v + 1)}>Tìm lại</button></p>}
+        {topicForm && <form className="topic-form" onSubmit={event => { event.preventDefault(); void submitTopic(); }}>
+          <h2>{topicForm.kind === 'parent' ? 'Tìm chủ đề cha' : 'Tạo chủ đề'}</h2>
+          <label htmlFor="topic-name">Tên chủ đề</label>
+          <input ref={nameInput} id="topic-name" value={topicName} required disabled={topicBusy} onChange={event => setTopicName(event.target.value)} aria-describedby={topicError ? 'topic-form-error' : undefined} />
+          {topicError && <p id="topic-form-error" role="alert" className="error">{topicError}</p>}
+          <div className="row"><button disabled={topicBusy || !topicName.trim()} type="submit">{topicBusy ? 'Đang xử lý…' : topicForm.kind === 'parent' ? 'Tìm chủ đề' : 'Tạo chủ đề'}</button><button disabled={topicBusy} type="button" className="ghost" onClick={() => setTopicForm(null)}>Hủy</button></div>
+        </form>}
         {hits && hits.notes.length > 0 && (
           <div className="search-overlay">
             <h2>Ghi chú</h2>
@@ -251,28 +302,28 @@ export function SubjectExplorer() {
         )}
         <div className="topic-content-heading"><span className="content-kicker">CHỦ ĐỀ ĐANG MỞ</span><h1>{selectedName}</h1><p>{notes.length} ghi chú trong chủ đề này</p></div>
         {loadingNotes && <p role="status">Đang tải ghi chú…</p>}
-        {loadError && <p role="alert" className="error">{loadError}</p>}
+        {loadError && <p role="alert" className="error">{loadError} <button type="button" className="ghost" onClick={() => setReload(v => v + 1)}>Thử lại</button></p>}
         {!loadingNotes && !loadError && notes.length === 0 && <div className="empty"><p>Chưa có ghi chú tại đây</p><button type="button" onClick={()=>{if (!canLeaveTopic()) return; router.push(selected === UNCATEGORIZED ? '/notes/new' : `/notes/new?topicId=${selected}`);}}>Viết ghi chú đầu tiên</button></div>}
         {notes.map(note => <TopicNoteContent key={note.id} note={note} onDirtyChange={markDirty} onSaved={async()=>{await reloadNotes();await refreshSharedNotes();}} onDelete={()=>void removeNote(note.id,note.title)} />)}
       </section>
-      <aside id="topic-details" className="graph-panel" hidden={!rightOpen}>
+      <aside ref={rightPanel} tabIndex={-1} id="topic-details" className="graph-panel" hidden={!rightOpen}>
         <LocalTopicGraph topic={selected === UNCATEGORIZED ? null : {id:selected,name:selectedName}} onSelect={topic=>{if (topic.id !== selected) void toggle(topic);}}>{children[selected] ?? []}</LocalTopicGraph>
         <div className="sidebar-heading"><WorkspaceIcon name="folder" /><span>Thông tin chủ đề</span></div>
         <h2>{selectedName}</h2>
         <p className="lede">
           {selected === UNCATEGORIZED
-            ? 'Note chưa gắn chủ đề'
-            : 'Chỉ note gắn đúng node này'}
+            ? 'Ghi chú chưa gắn chủ đề'
+            : 'Ghi chú gắn trực tiếp với chủ đề này'}
         </p>
         {selected !== UNCATEGORIZED && (
           <div className="panel-actions">
-            <button type="button" onClick={() => void addChild(selected)}>
+            <button type="button" onClick={() => openTopicForm('child', selected)}>
               Thêm chủ đề con
             </button>
             <button type="button" onClick={() => void openAttach(selected)}>
               Gắn ghi chú
             </button>
-            <button type="button" onClick={() => void openParent(selected)}>
+            <button type="button" onClick={() => openTopicForm('parent', selected)}>
               Thêm cha
             </button>
           </div>
@@ -300,15 +351,17 @@ export function SubjectExplorer() {
       </aside>
       <footer className="workspace-status"><span><WorkspaceIcon name="graph" /> {selected === UNCATEGORIZED ? 0 : 1 + (children[selected]?.length ?? 0)} nút trong đồ thị</span><span>{notes.length} ghi chú · {selectedName}</span></footer>
       {picker && (
-        <div className="picker">
+        <div className="picker" role="region" aria-label="Chọn liên kết chủ đề">
+          {pickerError && <p className="error" role="alert">{pickerError}</p>}
+          {pickerBusy && <p role="status">Đang tải…</p>}
           <h2>{picker === 'note' ? 'Chọn ghi chú' : 'Chọn chủ đề cha'}</h2>
-          <button type="button" className="ghost" onClick={() => setPicker(null)}>
+          <button type="button" className="ghost" disabled={pickerBusy} onClick={() => setPicker(null)}>
             Đóng
           </button>
           <ul className="cards">
             {pickerItems.map((item) => (
               <li key={item.id}>
-                <button type="button" className="ghost" onClick={() => void pick(item.id)}>
+                <button type="button" className="ghost" disabled={pickerBusy} onClick={() => void pick(item.id)}>
                   {item.label}
                 </button>
               </li>

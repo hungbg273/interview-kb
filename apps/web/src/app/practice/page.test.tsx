@@ -3,7 +3,6 @@ import {
   fireEvent,
   render,
   screen,
-  waitFor,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -26,106 +25,115 @@ import { AiJobsProvider } from "@/components/AiJobsProvider";
 afterEach(() => {
   cleanup();
   api.mockReset();
+  localStorage.clear();
 });
 
 describe("PracticePage", () => {
-  it("starts a quiz from a note and cannot continue without a choice", async () => {
+  it("starts a persisted mixed quiz, saves answers and submits the remaining questions", async () => {
+    let attempt = {
+      id: "a1",
+      status: "in_progress",
+      provider: "openai",
+      score: null as number | null,
+      correct: 0,
+      total: 2,
+      items: [
+        {
+          id: "q1",
+          type: "mcq",
+          prompt: "SYN first?",
+          choiceA: "yes",
+          choiceB: "no",
+          choiceC: "maybe",
+          choiceD: "never",
+          answer: null as unknown,
+          revision: 0,
+          state: "unanswered",
+          result: null as unknown,
+        },
+        {
+          id: "q2",
+          type: "essay",
+          prompt: "Explain ACK",
+          answer: null as unknown,
+          revision: 0,
+          state: "unanswered",
+          result: null as unknown,
+        },
+      ],
+    };
     api.mockImplementation(
-      async (path: string, init?: { method?: string; body?: string }) => {
-        if (path.startsWith("/search?q=")) {
+      async (path: string, init?: { body?: string; method?: string }) => {
+        if (path === "/auth/me") return { email: "test@example.invalid" };
+        if (path.startsWith("/practice/attempts/options"))
+          return {
+            mcq: 1,
+            essay: 1,
+            providers: { chatgpt: true, openai: true, deepseek: true },
+          };
+        if (path.startsWith("/search?q="))
           return { topics: [], notes: [{ id: "n1", title: "TCP handshake" }] };
+        if (path === "/practice/attempts") return structuredClone(attempt);
+        if (path.endsWith("/answer")) {
+          const body = JSON.parse(init!.body!);
+          const i = attempt.items.find((i) => path.includes(i.id))!;
+          i.answer = body.answer;
+          i.revision++;
+          i.state = "answered";
+          return structuredClone(attempt);
         }
-        if (path.startsWith("/practice/questions")) {
-          return {
-            items: [
-              {
-                id: "q1",
-                prompt: "SYN first?",
-                choiceA: "yes",
-                choiceB: "no",
-                choiceC: "maybe",
-                choiceD: "never",
-              },
-              {
-                id: "q2",
-                prompt: "ACK last?",
-                choiceA: "yes",
-                choiceB: "no",
-                choiceC: "maybe",
-                choiceD: "never",
-              },
-            ],
-          };
-        }
-        if (path === "/practice/grade" && init?.method === "POST") {
-          return {
-            total: 2,
+        if (path.endsWith("/submit")) {
+          attempt = {
+            ...attempt,
+            status: "completed",
+            score: 9,
             correct: 1,
-            items: [
-              {
-                questionId: "q1",
-                prompt: "SYN first?",
-                choice: "A",
-                correctChoice: "A",
-                ok: true,
-                explanationMarkdown: "yes",
+            items: attempt.items.map((i) => ({
+              ...i,
+              state: "graded",
+              result: {
+                score: i.type === "mcq" ? 10 : 8,
+                criteria: [],
+                strengths: [],
+                gaps: [],
+                improvements: [],
               },
-              {
-                questionId: "q2",
-                prompt: "ACK last?",
-                choice: "B",
-                correctChoice: "A",
-                ok: false,
-                explanationMarkdown: null,
-              },
-            ],
+            })),
           };
+          return attempt;
         }
         throw new Error(`unexpected ${path}`);
       },
     );
-
     render(<PracticePage />);
-
     fireEvent.change(screen.getByPlaceholderText("Tìm ghi chú hoặc chủ đề"), {
       target: { value: "TCP" },
     });
     fireEvent.click(
       await screen.findByRole("button", { name: "TCP handshake" }),
     );
-    expect(
-      screen.queryByRole("button", { name: "TCP handshake" }),
-    ).not.toBeInTheDocument();
-    expect(screen.getByText(/Ghi chú: TCP handshake/)).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Ngôn ngữ"), {
-      target: { value: "en" },
+    fireEvent.change(screen.getByLabelText("Trắc nghiệm"), {
+      target: { value: "1" },
+    });
+    fireEvent.change(screen.getByLabelText("Tự luận"), {
+      target: { value: "1" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Bắt đầu" }));
-
-    expect(await screen.findByText("Câu 1 / 2")).toBeInTheDocument();
-    expect(api).toHaveBeenCalledWith(
-      expect.stringContaining("/practice/questions?noteId=n1&limit=10&lang=en"),
-    );
-
-    expect(await screen.findByText("Câu 1 / 2")).toBeInTheDocument();
-    expect(screen.getByText("SYN first?")).toBeInTheDocument();
+    expect(await screen.findByText("SYN first?")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Câu tiếp" })).toBeDisabled();
-
     fireEvent.click(screen.getByLabelText(/A\./));
     fireEvent.click(screen.getByRole("button", { name: "Câu tiếp" }));
-
-    expect(await screen.findByText("Câu 2 / 2")).toBeInTheDocument();
-    fireEvent.click(screen.getByLabelText(/B\./));
+    expect(await screen.findByText("Explain ACK")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Câu trả lời"), {
+      target: { value: "Acknowledges receipt" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Nộp bài" }));
-
-    expect(await screen.findByText("Đúng 1 / 2")).toBeInTheDocument();
-    await waitFor(() => {
-      expect(api).toHaveBeenCalledWith(
-        "/practice/grade",
-        expect.objectContaining({
-          method: "POST",
-        }),
-      );
+    expect(await screen.findByText("Điểm: 9.0 / 10")).toBeInTheDocument();
+    const call = api.mock.calls.find(([path]) => path === "/practice/attempts");
+    expect(JSON.parse(call![1].body)).toMatchObject({
+      noteIds: ["n1"],
+      mcqCount: 1,
+      essayCount: 1,
     });
   });
 
@@ -202,10 +210,21 @@ describe("PracticePage", () => {
           ],
         };
       }
-      if (path.startsWith("/practice/questions")) {
+      if (path === "/practice/attempts") {
         return {
+          id: "a2",
+          status: "in_progress",
+          provider: "chatgpt",
+          score: null,
+          correct: 0,
+          total: 1,
           items: [
             {
+              type: "mcq",
+              answer: null,
+              revision: 0,
+              state: "unanswered",
+              result: null,
               id: "q1",
               prompt: "SYN first?",
               choiceA: "yes",
@@ -232,13 +251,13 @@ describe("PracticePage", () => {
     fireEvent.click(await screen.findByRole("button", { name: "TCP" }));
     fireEvent.click(screen.getByRole("button", { name: "Bắt đầu" }));
 
-    expect(await screen.findByText("Câu 1 / 1")).toBeInTheDocument();
+    expect(await screen.findByText(/Câu 1 \/ 1/)).toBeInTheDocument();
     const call = api.mock.calls.find(
-      ([path]) =>
-        typeof path === "string" && path.startsWith("/practice/questions"),
+      ([path]) => typeof path === "string" && path === "/practice/attempts",
     );
-    expect(call?.[0]).toContain("noteId=n1");
-    expect(call?.[0]).toContain("noteId=n2");
-    expect(call?.[0]).toContain("topicId=t1");
+    expect(JSON.parse(call![1].body)).toMatchObject({
+      noteIds: ["n1", "n2"],
+      topicIds: ["t1"],
+    });
   });
 });
