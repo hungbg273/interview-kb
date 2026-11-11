@@ -3,16 +3,21 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MarkdownPreview } from "./MarkdownPreview";
+import { NoteChat } from "./NoteChat";
 
 /** A native modal keeps keyboard focus in the reader and the workspace inert. */
 export function NoteFullscreen({
   markdown,
   title = "Ghi chú",
   disabled,
+  noteId,
+  dirty = false,
 }: {
   markdown: string;
   title?: string;
   disabled?: boolean;
+  noteId?: string;
+  dirty?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
@@ -71,6 +76,13 @@ export function NoteFullscreen({
           >
             <header className="note-fullscreen-header">
               <h2 id={headingId}>{title || "Không tiêu đề"}</h2>
+              {noteId && (
+                <NoteChat
+                  noteId={noteId}
+                  title={title ?? "Ghi chú"}
+                  dirty={dirty}
+                />
+              )}
               <button
                 type="button"
                 className="ghost"

@@ -29,6 +29,9 @@ export function NoteChat({
   dirty: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [motion, setMotion] = useState<"entering" | "visible" | "closing">(
+    "entering",
+  );
   const [history, setHistory] = useState<History | null>(null);
   const [question, setQuestion] = useState("");
   const [provider, setProvider] = useState<AiProvider>("chatgpt");
@@ -47,6 +50,7 @@ export function NoteChat({
     revision: number;
   } | null>(null);
   const mounted = useRef(true);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const id = useId();
   const path = `/notes/${noteId}/chat`;
   useEffect(() => {
@@ -61,12 +65,21 @@ export function NoteChat({
     const overflow = document.body.style.overflow;
     element.showModal();
     document.body.style.overflow = "hidden";
+    const frame = requestAnimationFrame(() => setMotion("visible"));
     return () => {
+      cancelAnimationFrame(frame);
+      if (closeTimer.current) clearTimeout(closeTimer.current);
       element.close();
       document.body.style.overflow = overflow;
       trigger.current?.focus();
     };
   }, [open]);
+  function closeChat() {
+    if (!open || motion === "closing") return;
+    setMotion("closing");
+    closeTimer.current = setTimeout(() => setOpen(false), 220);
+  }
+
   useEffect(() => {
     if (!open || pending.current) return;
     const abort = new AbortController();
@@ -199,14 +212,16 @@ export function NoteChat({
         createPortal(
           <dialog
             ref={dialog}
-            className="note-chat-window"
+            className={`note-chat-window is-${motion}`}
             aria-labelledby={`${id}-title`}
             onCancel={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              setOpen(false);
+              closeChat();
             }}
-            onClose={() => setOpen(false)}
+            onClose={() => {
+              if (motion !== "closing") setOpen(false);
+            }}
             onKeyDown={(event) => event.stopPropagation()}
           >
             <header className="note-chat-header">
@@ -218,7 +233,7 @@ export function NoteChat({
                 type="button"
                 className="ghost"
                 autoFocus
-                onClick={() => setOpen(false)}
+                onClick={closeChat}
               >
                 Đóng chat
               </button>

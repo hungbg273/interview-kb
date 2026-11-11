@@ -81,8 +81,39 @@ test("ignores a stale render when the source changes", async () => {
   expect(screen.queryByText("Old")).toBeNull();
 });
 
-test.each(['%%{init: {"securityLevel":"loose"}}%%\nflowchart LR\nA-->B','---\nconfig:\n securityLevel: loose\n---\nflowchart LR\nA-->B','x'.repeat(20001)])('rejects embedded configuration and oversized diagram sources',async(source)=>{
- render(<MarkdownPreview markdown={'```mermaid\n'+source+'\n```'} />);
- expect(await screen.findByRole('alert')).toHaveTextContent('Không thể hiển thị sơ đồ');
- expect(renderDiagram).not.toHaveBeenCalled();
+test.each([
+  '%%{init: {"securityLevel":"loose"}}%%\nflowchart LR\nA-->B',
+  "---\nconfig:\n securityLevel: loose\n---\nflowchart LR\nA-->B",
+  "x".repeat(20001),
+])(
+  "rejects embedded configuration and oversized diagram sources",
+  async (source) => {
+    render(<MarkdownPreview markdown={"```mermaid\n" + source + "\n```"} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Không thể hiển thị sơ đồ",
+    );
+    expect(renderDiagram).not.toHaveBeenCalled();
+  },
+);
+
+test("renders inline and block mathematical formulas", () => {
+  render(
+    <MarkdownPreview
+      markdown={"Inline \\(x^2\\) then\n\n$$\n\\frac{a}{b} = c\n$$"}
+    />,
+  );
+  expect(document.querySelector(".katex")).toBeInTheDocument();
+  expect(document.querySelector(".katex-display")).toBeInTheDocument();
+});
+
+test("renders legacy LaTeX display and inline delimiters outside code", () => {
+  render(
+    <MarkdownPreview
+      markdown={
+        "Before \\(a+b\\)\n\n\\[\n\\frac{100M}{86400}\n\\]\n\n`\\(x\\)`"
+      }
+    />,
+  );
+  expect(document.querySelectorAll(".katex").length).toBe(2);
+  expect(screen.getByText("\\(x\\)")).toBeInTheDocument();
 });

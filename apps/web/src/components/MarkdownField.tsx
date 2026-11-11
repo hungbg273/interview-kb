@@ -7,6 +7,8 @@ import { MarkdownPreview } from "./MarkdownPreview";
 export function MarkdownField({
   value,
   title,
+  noteId,
+  dirty = false,
   onChange,
   disabled,
   className = "pad",
@@ -15,6 +17,8 @@ export function MarkdownField({
 }: {
   value: string;
   title?: string;
+  noteId?: string;
+  dirty?: boolean;
   onChange: (value: string) => void;
   disabled?: boolean;
   className?: string;
@@ -59,7 +63,13 @@ export function MarkdownField({
             Xem trước
           </button>
         </div>
-        <NoteFullscreen markdown={value} title={title} disabled={disabled} />
+        <NoteFullscreen
+          markdown={value}
+          title={title}
+          disabled={disabled}
+          noteId={noteId}
+          dirty={dirty}
+        />
       </div>
       {uploading && (
         <p className="field-hint" role="status">

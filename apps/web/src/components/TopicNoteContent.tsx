@@ -65,6 +65,8 @@ export function TopicNoteContent({
           </label>
           <MarkdownField
             title={title}
+            noteId={note.id}
+            dirty={title !== note.title || body !== (note.bodyMarkdown ?? "")}
             defaultPreview={false}
             onUploadStateChange={setUploading}
             disabled={busy}
@@ -115,6 +117,7 @@ export function TopicNoteContent({
             <NoteFullscreen
               markdown={note.bodyMarkdown ?? ""}
               title={note.title}
+              noteId={note.id}
             />
             <button
               type="button"

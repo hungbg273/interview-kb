@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 
 export function NoteEditor(props: {
   disabled?: boolean;
+  noteId?: string;
+  dirty?: boolean;
   title: string;
   bodyMarkdown: string;
   onTitleChange: (title: string) => void;
@@ -102,6 +104,8 @@ export function NoteEditor(props: {
         {props.error && <p className="error">{props.error}</p>}
         <MarkdownField
           title={props.title}
+          noteId={props.noteId}
+          dirty={props.dirty}
           onUploadStateChange={setUploading}
           value={props.bodyMarkdown}
           onChange={props.onBodyChange}

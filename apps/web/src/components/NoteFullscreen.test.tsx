@@ -62,3 +62,23 @@ it("reads a topic note and restores scrolling on Escape", () => {
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(document.body.style.overflow).toBe("");
 });
+
+it("opens the note chat from the fullscreen reader", () => {
+  render(
+    <MarkdownField
+      value="# Saved"
+      title="TCP"
+      noteId="n1"
+      dirty={false}
+      onChange={() => {}}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Toàn màn hình" }));
+  const fullscreen = screen.getByRole("dialog", { name: "TCP" });
+  fireEvent.click(
+    within(fullscreen).getByRole("button", { name: "Hỏi về note" }),
+  );
+  expect(
+    screen.getByRole("dialog", { name: /Hỏi về note/ }),
+  ).toBeInTheDocument();
+});

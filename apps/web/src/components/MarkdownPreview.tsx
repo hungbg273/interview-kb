@@ -2,6 +2,9 @@
 import { Children, isValidElement, useEffect, useState } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import { normalizeMathDelimiters } from "@/lib/normalize-math-delimiters";
 import { MarkdownImage } from "./MarkdownImage";
 import { renderMermaid } from "@/lib/render-mermaid";
 
@@ -81,8 +84,12 @@ const components: Components = {
 export function MarkdownPreview({ markdown }: { markdown: string }) {
   return (
     <div className="markdown-content markdown-preview">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-        {markdown}
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeKatex]}
+        components={components}
+      >
+        {normalizeMathDelimiters(markdown)}
       </ReactMarkdown>
     </div>
   );

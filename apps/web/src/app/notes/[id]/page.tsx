@@ -378,6 +378,8 @@ function EditNote() {
         <NoteChat key={`chat-${id}`} noteId={id} title={title} dirty={dirty} />
       )}
       <NoteEditor
+        noteId={id}
+        dirty={dirty}
         disabled={loading || loadFailed}
         title={title}
         bodyMarkdown={body}

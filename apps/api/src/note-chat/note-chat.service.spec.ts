@@ -44,6 +44,8 @@ describe('note chat', () => {
     await run(() => service.send('note', dto));
     const prompt = llm.complete.mock.calls[0][0];
     expect(prompt.owner).toBe(account.email);
+    expect(prompt.system).toContain('## Thuật ngữ');
+    expect(prompt.system).toContain('first section');
     expect(prompt.user).toContain('Three-way handshake');
     expect(prompt.user).toContain('What is TCP?');
     expect(chats.finish).toHaveBeenCalledWith(

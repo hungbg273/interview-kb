@@ -311,13 +311,11 @@ describe('Markdown result format', () => {
     async (action) => {
       const svc = new AiService(
         {
-          findById: jest
-            .fn()
-            .mockResolvedValue({
-              id: 'n1',
-              title: 'TCP',
-              bodyMarkdown: 'Body',
-            }),
+          findById: jest.fn().mockResolvedValue({
+            id: 'n1',
+            title: 'TCP',
+            bodyMarkdown: 'Body',
+          }),
         } as never,
         {} as never,
         {} as never,
@@ -328,6 +326,9 @@ describe('Markdown result format', () => {
         targetLang: 'vi',
       });
       expect(prepared.system).toContain('```mermaid');
+      expect(prepared.system).toContain('## Thuật ngữ');
+      expect(prepared.system).toContain('first section');
+      expect(prepared.system).toContain('Expand acronyms');
       expect(prepared.system).toContain('Do not wrap the entire response');
     },
   );
@@ -353,6 +354,7 @@ it('keeps structured question prompts free of Markdown output instructions', asy
   });
   expect(prepared.system).toContain('Return JSON');
   expect(prepared.system).not.toContain('Return Markdown content only');
+  expect(prepared.system).not.toContain('## Thuật ngữ');
 });
 
 it.each(['expand', 'generate-content'] as const)(
@@ -360,13 +362,11 @@ it.each(['expand', 'generate-content'] as const)(
   async (action) => {
     const svc = new AiService(
       {
-        findById: jest
-          .fn()
-          .mockResolvedValue({
-            id: 'n1',
-            title: 'NestJS request lifecycle',
-            bodyMarkdown: 'Lifecycle',
-          }),
+        findById: jest.fn().mockResolvedValue({
+          id: 'n1',
+          title: 'NestJS request lifecycle',
+          bodyMarkdown: 'Lifecycle',
+        }),
       } as never,
       {} as never,
       {} as never,
@@ -417,4 +417,15 @@ it('generates and persists essay references and rubrics', async () => {
     }),
   );
   expect(complete.mock.calls[0][0].system).toContain('rubric');
+});
+
+it('starts video study-note instructions with the terminology section', async () => {
+  const complete = jest.fn().mockResolvedValue('## Thuật ngữ\n- TCP: protocol');
+  const svc = new AiService({} as never, {} as never, { complete } as never);
+  await svc.summarizeVideo('TCP uses a handshake.', {
+    provider: 'chatgpt',
+    lang: 'vi',
+  });
+  expect(complete.mock.calls[0][0].system).toContain('## Thuật ngữ');
+  expect(complete.mock.calls[0][0].system).toContain('first section');
 });

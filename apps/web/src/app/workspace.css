@@ -600,3 +600,14 @@ input[type="radio"], input[type="checkbox"] { min-height: 0; accent-color: var(-
 .note-chat-send span { color: var(--muted); font-size: 11px; }
 .note-chat-send button { min-height: 44px; }
 @media (max-height: 600px) { .note-chat-header { padding: 8px 16px; } .note-chat-context { display: none; } .note-chat-composer textarea { min-height: 44px; max-height: 72px; } }
+
+/* The dialog remains mounted for the short exit transition. */
+.note-chat-window { opacity: 0; transform: translateX(22px); transition: opacity 200ms ease, transform 260ms cubic-bezier(.2,.75,.25,1), overlay 260ms allow-discrete, display 260ms allow-discrete; }
+.note-chat-window.is-visible { opacity: 1; transform: translateX(0); }
+.note-chat-window.is-closing { opacity: 0; transform: translateX(18px); }
+.note-chat-window::backdrop { background: #0000; transition: background-color 200ms ease; }
+.note-chat-window.is-visible::backdrop { background: #0003; }
+.note-chat-window.is-closing::backdrop { background: #0000; }
+@media (prefers-reduced-motion: reduce) {
+  .note-chat-window, .note-chat-window::backdrop { transition-duration: 1ms; }
+}

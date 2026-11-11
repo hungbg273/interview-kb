@@ -72,7 +72,7 @@ it("keeps a failed question for retry and restores focus when closing", async ()
   );
   expect(screen.getByLabelText("Câu hỏi của bạn")).toHaveValue("Explain");
   fireEvent.click(screen.getByRole("button", { name: "Đóng chat" }));
-  expect(trigger).toHaveFocus();
+  await waitFor(() => expect(trigger).toHaveFocus());
 });
 it("requires saving edits before sending while still allowing history to be read", async () => {
   render(<NoteChat noteId="n1" title="TCP" dirty />);

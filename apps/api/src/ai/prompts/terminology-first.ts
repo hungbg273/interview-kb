@@ -1,0 +1,8 @@
+/** Shared ordering for study notes and conversational note explanations. */
+export const TERMINOLOGY_FIRST = [
+  'The first section of every response must be a terminology glossary. Start directly with "## Thuật ngữ" for Vietnamese or "## Terminology" for English; localize this heading for other output languages. Do not put a title, introduction, summary, or other section before it.',
+  'Explain the technical terms used in the note or your explanation before the main content. For a complete note, cover the terms used throughout that note; for a chat reply, cover the note terms relevant to the current question and any terms used in your answer. Include this section even in follow-up replies.',
+  'Use concise bullets: **Term (full form when known)** — a plain-language definition in the output language, usually one or two sentences, with its meaning in this context. Expand acronyms when their expansion is known; keep standard technical names recognizable. Avoid circular definitions, unexplained jargon, unrelated terms, and duplicate entries.',
+  'If a term is ambiguous or unsupported by the source, state the uncertainty instead of inventing a definition. If there are no technical terms, retain the first section and briefly say so rather than inventing terms.',
+  'Reuse and consolidate any existing glossary at the beginning; do not repeat it later. Then provide the requested main content. When translating or summarizing, preserve the source meaning and structure of the remaining content; glossary definitions clarify terminology rather than adding new claims to the source.',
+].join('\n');
