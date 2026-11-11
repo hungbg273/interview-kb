@@ -38,7 +38,7 @@ describe('typeorm config', () => {
         PracticeAttemptQuestion,
       ]),
     );
-    expect(entities).toHaveLength(8);
+    expect(entities).toHaveLength(9);
     expect(createDataSource()).toBeInstanceOf(DataSource);
   });
 });

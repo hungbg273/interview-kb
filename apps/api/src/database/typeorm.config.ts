@@ -1,3 +1,5 @@
+import { NoteChat } from '../entities/note-chat.entity';
+import { NoteChat1760000000012 } from '../migrations/1760000000012-NoteChat';
 import { NoteImage } from '../entities/note-image.entity';
 import { NoteImages1760000000011 } from '../migrations/1760000000011-NoteImages';
 import { PracticeEssays1760000000010 } from '../migrations/1760000000010-PracticeEssays';
@@ -21,6 +23,7 @@ import { SubjectGraph1760000000004 } from '../migrations/1760000000004-SubjectGr
 import { QuestionLang1760000000005 } from '../migrations/1760000000005-QuestionLang';
 
 export const entities = [
+  NoteChat,
   NoteImage,
   PracticeAttempt,
   PracticeAttemptQuestion,
@@ -43,6 +46,7 @@ export const migrations = [
   Interviews1760000000009,
   PracticeEssays1760000000010,
   NoteImages1760000000011,
+  NoteChat1760000000012,
 ];
 
 export function typeormOptions(): DataSourceOptions {

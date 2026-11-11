@@ -1,4 +1,5 @@
 "use client";
+import { NoteChat } from "@/components/NoteChat";
 import { PublicationControls } from "@/components/PublicationControls";
 
 import { useAiJobs } from "@/components/AiJobsProvider";
@@ -372,6 +373,9 @@ function EditNote() {
         <p className="clone-attribution">
           Bản sao từ “{sourcePublication.title}” · {sourcePublication.author}
         </p>
+      )}
+      {!loading && !loadFailed && (
+        <NoteChat key={`chat-${id}`} noteId={id} title={title} dirty={dirty} />
       )}
       <NoteEditor
         disabled={loading || loadFailed}
