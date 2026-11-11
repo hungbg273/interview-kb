@@ -1,22 +1,36 @@
 "use client";
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
+import { useClipboardImages } from "./useClipboardImages";
+import { NoteFullscreen } from "./NoteFullscreen";
 import { MarkdownPreview } from "./MarkdownPreview";
 /** Mode is local UI state; the parent owns the draft in both modes. */
 export function MarkdownField({
   value,
+  title,
   onChange,
   disabled,
   className = "pad",
   defaultPreview = true,
+  onUploadStateChange,
 }: {
   value: string;
+  title?: string;
   onChange: (value: string) => void;
   disabled?: boolean;
   className?: string;
   defaultPreview?: boolean;
+  onUploadStateChange?: (busy: boolean) => void;
 }) {
   const [previewing, setPreviewing] = useState(defaultPreview);
   const contentId = useId();
+  const textarea = useRef<HTMLTextAreaElement>(null);
+  const { onPaste, uploading, error } = useClipboardImages(
+    value,
+    onChange,
+    disabled,
+    textarea,
+    onUploadStateChange,
+  );
   return (
     <>
       <div className="note-content-toolbar">
@@ -45,7 +59,18 @@ export function MarkdownField({
             Xem trước
           </button>
         </div>
+        <NoteFullscreen markdown={value} title={title} disabled={disabled} />
       </div>
+      {uploading && (
+        <p className="field-hint" role="status">
+          Đang tải ảnh… Bạn có thể tiếp tục viết.
+        </p>
+      )}
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
       {previewing ? (
         <section
           className="note-markdown-preview"
@@ -60,6 +85,9 @@ export function MarkdownField({
         </section>
       ) : (
         <textarea
+          ref={textarea}
+          onPaste={onPaste}
+          aria-describedby={`${contentId}-hint`}
           id={contentId}
           disabled={disabled}
           className={className}
@@ -67,6 +95,11 @@ export function MarkdownField({
           onChange={(e) => onChange(e.target.value)}
           placeholder="Viết tự do. Không cần Markdown."
         />
+      )}
+      {!previewing && (
+        <p id={`${contentId}-hint`} className="field-hint">
+          Dán ảnh bằng Ctrl/Cmd+V · PNG, JPEG, WebP · tối đa 5 MB/ảnh.
+        </p>
       )}
     </>
   );

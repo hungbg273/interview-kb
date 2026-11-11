@@ -1,3 +1,4 @@
+import { NoteImagesModule } from './note-images/note-images.module';
 import { MeetingsModule } from './meetings/meetings.module';
 import { InterviewsModule } from './interviews/interviews.module';
 import { CommunityModule } from './community/community.module';
@@ -51,6 +52,7 @@ import { TopicsModule } from './topics/topics.module';
     AuthModule,
     TopicsModule,
     NotesModule,
+    NoteImagesModule,
     QuestionsModule,
     PracticeModule,
     AiModule,

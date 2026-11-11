@@ -1,10 +1,14 @@
+import { NoteImagesRepository } from '../database/note-images.repository';
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { currentAccount } from '../accounts/account-context';
 import { AppError } from '../common/app-error';
 @Injectable()
 export class CommunityService {
-  constructor(private readonly db: DataSource) {}
+  constructor(
+    private readonly db: DataSource,
+    private readonly images: NoteImagesRepository,
+  ) {}
   async list(page = 1) {
     const items = await this.db.query(
       `SELECT p.id,p.title,p.published_at AS "publishedAt",u.display_name AS author,EXISTS(SELECT 1 FROM library_clone c WHERE c.publication_id=p.id AND c.user_id=$1) AS saved FROM note_publication p JOIN app_user u ON u.id=p.user_id WHERE p.is_published AND p.user_id<>$1 ORDER BY p.published_at DESC,p.id DESC LIMIT 21 OFFSET $2`,
@@ -87,14 +91,15 @@ export class CommunityService {
         title: publication.title,
         publishedAt: publication.published_at,
       };
+      const bodyMarkdown = await this.images.cloneReferences(
+        m,
+        publication.body_markdown,
+        publication.user_id,
+        userId,
+      );
       const [note] = await m.query(
         'INSERT INTO note(user_id,title,body_markdown,source_publication) VALUES($1,$2,$3,$4) RETURNING id',
-        [
-          userId,
-          publication.title,
-          publication.body_markdown,
-          JSON.stringify(source),
-        ],
+        [userId, publication.title, bodyMarkdown, JSON.stringify(source)],
       );
       if (topicId)
         await m.query(

@@ -1,3 +1,4 @@
+import { NoteImage } from '../entities/note-image.entity';
 import { PracticeAttempt } from '../entities/practice-attempt.entity';
 import { PracticeAttemptQuestion } from '../entities/practice-attempt-question.entity';
 import { DataSource } from 'typeorm';
@@ -30,13 +31,14 @@ describe('typeorm config', () => {
         Topic,
         TopicParent,
         Note,
+        NoteImage,
         NoteTopic,
         Question,
         PracticeAttempt,
         PracticeAttemptQuestion,
       ]),
     );
-    expect(entities).toHaveLength(7);
+    expect(entities).toHaveLength(8);
     expect(createDataSource()).toBeInstanceOf(DataSource);
   });
 });

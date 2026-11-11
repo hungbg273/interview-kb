@@ -552,3 +552,19 @@ input[type="radio"], input[type="checkbox"] { min-height: 0; accent-color: var(-
   .topic-map-dot { transition:background-color 140ms ease-out,border-color 140ms ease-out,color 140ms ease-out; }
   .topic-map-edges path { transition:stroke 140ms ease-out; }
 }
+
+/* Images follow the Markdown column, never their source pixel dimensions. */
+.markdown-preview .markdown-image { display:block; width:auto; max-width:100%; max-height:min(70dvh,720px); height:auto; margin:16px auto; border-radius:6px; object-fit:contain; }
+.markdown-image-state { display:block; padding:16px; margin:12px 0; border:1px dashed var(--line); border-radius:6px; color:var(--muted); font-size:13px; overflow-wrap:anywhere; }
+.markdown-image-state button { margin:8px 0 0; min-height:44px; }
+
+/* Full-window reading keeps the draft mounted underneath. */
+.note-content-toolbar { flex-wrap: wrap; }
+.note-fullscreen-trigger { display: inline-flex; align-items: center; justify-content: center; gap: 7px; white-space: nowrap; }
+.note-fullscreen { position: fixed; inset: 0; width: 100%; max-width: none; height: 100dvh; max-height: none; margin: 0; padding: 0; border: 0; border-radius: 0; background: var(--surface); color: var(--ink); overflow: auto; overscroll-behavior: contain; }
+.note-fullscreen::backdrop { background: var(--bg); }
+.note-fullscreen-header { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px clamp(16px, 4vw, 48px); background: var(--surface); border-bottom: 1px solid var(--line); }
+.note-fullscreen-header h2 { min-width: 0; margin: 0; font-size: 16px; line-height: 1.5; text-transform: none; overflow-wrap: anywhere; }
+.note-fullscreen-header button { flex-shrink: 0; min-height: 44px; }
+.note-fullscreen-content { width: min(100%, 960px); box-sizing: border-box; margin: 0 auto; padding: clamp(24px, 5vw, 64px) clamp(16px, 4vw, 48px) 80px; overflow-wrap: anywhere; }
+@media (max-width: 480px) { .note-fullscreen-header { align-items: flex-start; flex-direction: column; gap: 8px; } }

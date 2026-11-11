@@ -2,6 +2,7 @@
 
 import { WorkspaceLink } from "./WorkspaceNavigation";
 
+import { NoteFullscreen } from "./NoteFullscreen";
 import { MarkdownField } from "./MarkdownField";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
@@ -22,6 +23,7 @@ export function TopicNoteContent({
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(note.title);
   const [body, setBody] = useState(note.bodyMarkdown ?? "");
+  const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -29,6 +31,7 @@ export function TopicNoteContent({
     setBody(note.bodyMarkdown ?? "");
   }, [note.title, note.bodyMarkdown]);
   async function save() {
+    if (uploading || busy) return;
     setBusy(true);
     setError("");
     try {
@@ -61,7 +64,9 @@ export function TopicNoteContent({
             />
           </label>
           <MarkdownField
+            title={title}
             defaultPreview={false}
+            onUploadStateChange={setUploading}
             disabled={busy}
             className="topic-note-pad"
             value={body}
@@ -76,7 +81,11 @@ export function TopicNoteContent({
             </p>
           )}
           <div className="row">
-            <button type="button" disabled={busy} onClick={() => void save()}>
+            <button
+              type="button"
+              disabled={busy || uploading}
+              onClick={() => void save()}
+            >
               {busy ? "Đang lưu…" : "Lưu ghi chú"}
             </button>
             <button
@@ -103,6 +112,10 @@ export function TopicNoteContent({
             </WorkspaceLink>
           </h2>
           <div className="note-content-actions">
+            <NoteFullscreen
+              markdown={note.bodyMarkdown ?? ""}
+              title={note.title}
+            />
             <button
               type="button"
               className="ghost"

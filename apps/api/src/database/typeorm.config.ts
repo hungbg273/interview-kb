@@ -1,3 +1,5 @@
+import { NoteImage } from '../entities/note-image.entity';
+import { NoteImages1760000000011 } from '../migrations/1760000000011-NoteImages';
 import { PracticeEssays1760000000010 } from '../migrations/1760000000010-PracticeEssays';
 import { PracticeAttempt } from '../entities/practice-attempt.entity';
 import { PracticeAttemptQuestion } from '../entities/practice-attempt-question.entity';
@@ -19,6 +21,7 @@ import { SubjectGraph1760000000004 } from '../migrations/1760000000004-SubjectGr
 import { QuestionLang1760000000005 } from '../migrations/1760000000005-QuestionLang';
 
 export const entities = [
+  NoteImage,
   PracticeAttempt,
   PracticeAttemptQuestion,
   Topic,
@@ -39,6 +42,7 @@ export const migrations = [
   PersonalLibraries1760000000008,
   Interviews1760000000009,
   PracticeEssays1760000000010,
+  NoteImages1760000000011,
 ];
 
 export function typeormOptions(): DataSourceOptions {

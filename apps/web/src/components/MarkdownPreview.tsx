@@ -2,6 +2,7 @@
 import { Children, isValidElement, useEffect, useState } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { MarkdownImage } from "./MarkdownImage";
 import { renderMermaid } from "@/lib/render-mermaid";
 
 function MermaidDiagram({ source }: { source: string }) {
@@ -52,6 +53,15 @@ function MermaidDiagram({ source }: { source: string }) {
   );
 }
 const components: Components = {
+  img({ src, alt, title }) {
+    return (
+      <MarkdownImage
+        src={typeof src === "string" ? src : undefined}
+        alt={alt}
+        title={title}
+      />
+    );
+  },
   pre({ children }) {
     const child = Children.toArray(children)[0];
     if (

@@ -18,13 +18,16 @@ export function NoteEditor(props: {
   onRemoveTopic?: (id: string) => void;
 }) {
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [saved, setSaved] = useState(false);
 
   const [saveError, setSaveError] = useState("");
-  useEffect(() => { setSaved(false); }, [props.title, props.bodyMarkdown, props.topics]);
+  useEffect(() => {
+    setSaved(false);
+  }, [props.title, props.bodyMarkdown, props.topics]);
 
   async function handleSave() {
-    if (saving || props.disabled) return;
+    if (saving || uploading || props.disabled) return;
     setSaving(true);
     setSaved(false);
     setSaveError("");
@@ -35,7 +38,9 @@ export function NoteEditor(props: {
         props.onSavedAck?.();
       }
     } catch {
-      setSaveError("Không lưu được ghi chú. Nội dung của bạn vẫn được giữ, hãy thử lại.");
+      setSaveError(
+        "Không lưu được ghi chú. Nội dung của bạn vẫn được giữ, hãy thử lại.",
+      );
     } finally {
       setSaving(false);
     }
@@ -96,6 +101,8 @@ export function NoteEditor(props: {
         )}
         {props.error && <p className="error">{props.error}</p>}
         <MarkdownField
+          title={props.title}
+          onUploadStateChange={setUploading}
           value={props.bodyMarkdown}
           onChange={props.onBodyChange}
           disabled={saving || props.disabled}
@@ -103,13 +110,20 @@ export function NoteEditor(props: {
         <button
           type="button"
           className="editor-save"
+          disabled={uploading}
           onClick={() => void handleSave()}
         >
           {saving ? "Đang lưu…" : "Lưu"}
         </button>
       </fieldset>
-      <p className="save-status" role="status" aria-live="polite">{saved ? "Đã lưu" : ""}</p>
-      {saveError && <p className="error" role="alert">{saveError}</p>}
+      <p className="save-status" role="status" aria-live="polite">
+        {saved ? "Đã lưu" : ""}
+      </p>
+      {saveError && (
+        <p className="error" role="alert">
+          {saveError}
+        </p>
+      )}
     </div>
   );
 }
